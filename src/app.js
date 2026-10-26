@@ -4,6 +4,8 @@
    ============================================================ */
 'use strict';
 
+const t = (key, params) => typeof TrellisI18n !== 'undefined' ? TrellisI18n.t(key, params) : key;
+
 /* 22 visual themes. The native specimen card is included as the baseline;
    all other entries are adapted from UI-Prompt style families. */
 const THEME_DEFS = Object.freeze([
@@ -33,7 +35,11 @@ const THEME_DEFS = Object.freeze([
 const THEME_IDS = THEME_DEFS.map((theme) => theme.id);
 const THEME_BY_ID = new Map(THEME_DEFS.map((theme) => [theme.id, theme]));
 const isThemeId = (theme) => THEME_IDS.includes(theme);
-const themeLabel = (theme) => (THEME_BY_ID.get(theme) || THEME_BY_ID.get('specimen')).label;
+const themeLabel = (theme) => {
+  const custom = t('theme_' + String(theme).replace(/-/g, '_'));
+  if (custom && custom !== 'theme_' + String(theme).replace(/-/g, '_')) return custom;
+  return (THEME_BY_ID.get(theme) || THEME_BY_ID.get('specimen')).label;
+};
 
 /* ---------- 常量 ---------- */
 const LANES = ['规划', '动手', '收束', '完结'];
@@ -98,6 +104,7 @@ const state = {
   prdCache: null,         // 背面文档缓存 { key, docs, error }，聚焦切换即失效
   docSel: null,           // 背面当前选中的文档名
   mode: 'card',           // 'card' | 'capsule'
+  language: 'en',         // 'en' | 'zh'
   theme: isThemeId(document.body.dataset.theme) ? document.body.dataset.theme : 'specimen',
   showArchived: false,    // 是否显示已归档任务（用于树列表过滤）
   winHeights: { card: null, back: null, admin: null }, // 各视图缓存窗口高度（切视图秒切，不重测量）
@@ -155,7 +162,7 @@ function runtimeStateIcon(displayState) {
   }
 }
 function focusLockHtml(manual) {
-  return `${icon(manual ? 'unlock' : 'lock', 12)}<span>${manual ? '解除锁定' : '锁定当前任务'}</span>`;
+  return `${icon(manual ? 'unlock' : 'lock', 12)}<span>${manual ? t('unlock_task') : t('lock_task')}</span>`;
 }
 function runtimeActivityHtml(text) {
   return `<span class="activity-prefix" aria-hidden="true">${icon('arrow-right', 9)}</span>${esc(text)}`;
@@ -196,15 +203,15 @@ function announce(msg) {
 }
 function relTime(m) {
   if (!m) return '';
-  const t = typeof m === 'number' ? m : new Date(String(m).replace(' ', 'T')).getTime();
-  if (!t || Number.isNaN(t)) return '';
-  const sec = Math.max(0, Math.round((Date.now() - t) / 1000));
-  if (sec < 60) return '刚刚';
-  if (sec < 3600) return Math.floor(sec / 60) + ' 分钟前';
-  if (sec < 86400) return Math.floor(sec / 3600) + ' 小时前';
+  const tNum = typeof m === 'number' ? m : new Date(String(m).replace(' ', 'T')).getTime();
+  if (!tNum || Number.isNaN(tNum)) return '';
+  const sec = Math.max(0, Math.round((Date.now() - tNum) / 1000));
+  if (sec < 60) return t('just_now');
+  if (sec < 3600) return t('minutes_ago', { n: Math.floor(sec / 60) });
+  if (sec < 86400) return t('hours_ago', { n: Math.floor(sec / 3600) });
   const days = Math.floor(sec / 86400);
-  if (days < 45) return days + ' 天前';
-  return new Date(t).toISOString().slice(0, 10);
+  if (days < 45) return t('days_ago', { n: days });
+  return new Date(tNum).toISOString().slice(0, 10);
 }
 /* 项目列表排序：按最近活动时间（last_activity）倒序；无活动时间的排最后 */
 function byRecentActivity(a, b) {
@@ -269,7 +276,7 @@ async function checkForUpdate() {
 function showUpdateBanner({ version, notes, url }) {
   const banner = $('updateBanner');
   if (!banner) return;
-  $('updateVersion').textContent = `发现新版本 v${version}`;
+  $('updateVersion').textContent = `${t('update_title')} v${version}`;
   const notesEl = $('updateNotes');
   if (notesEl) {
     /* 更新说明来自 GitHub Release body（markdown）：用 marked 渲染为 HTML，保持排版。 */
@@ -313,6 +320,9 @@ function loadPrefs() {
     /* 缺失或损坏时回退到 true，不影响现有用户 */
     if (typeof p.autoFollowImportant === 'boolean') state.autoFollowImportant = p.autoFollowImportant;
     if (typeof p.showArchived === 'boolean') state.showArchived = p.showArchived;
+    if (p.language === 'en' || p.language === 'zh') state.language = p.language;
+    else state.language = 'en';
+    if (typeof TrellisI18n !== 'undefined') TrellisI18n.setLocale(state.language);
     if (isThemeId(p.theme)) state.theme = p.theme;
     /* 本地实验曾把 shadcn 写成默认并写入 prefs；回退到标本卡。显式再选 shadcn 会带 uiRev。 */
     if ((!p.uiRev || p.uiRev < 1) && p.theme === 'shadcn') {
@@ -346,11 +356,27 @@ function savePrefs() {
       alwaysOnTop: state.alwaysOnTop,
       autoFollowImportant: state.autoFollowImportant, theme: state.theme,
       showArchived: state.showArchived,
+      language: state.language,
       winHeights: state.winHeights,
       winWidths: state.winWidths,
       uiRev: 1,
     }));
   } catch { /* localStorage 不可用时静默 */ }
+}
+
+function setLanguage(lang) {
+  const next = lang === 'zh' ? 'zh' : 'en';
+  state.language = next;
+  if (typeof TrellisI18n !== 'undefined') {
+    TrellisI18n.setLocale(next);
+  }
+  renderThemePicker();
+  savePrefs();
+  if (state.view === 'setup') {
+    renderSetup();
+  } else {
+    render();
+  }
 }
 
 function applyTheme(theme, persist = true) {
@@ -494,16 +520,30 @@ function isNewSinceAutoFollowChanged(view) {
   if (!view || !state.autoFollowChangedAt) return true;
   return (view.lastChangedAt || 0) * 1000 >= state.autoFollowChangedAt;
 }
-const DISPLAY_COPY = {
-  planning: '规划中', working: '正在实现', waiting_permission: '等待授权',
-  waiting_question: '等待你的回答', reviewing: '首轮检查', turn_done: '本轮已完成',
-  blocked: '已阻塞', failed: '执行失败', stale: '会话已过期', completed: '已完成', idle: '空闲',
-};
-const ACTION_COPY = {
-  create: '创建任务', brainstorm: '头脑风暴', research: '调研', prd: '整理 PRD',
-  context: '补充上下文', activate: '激活任务', implement: '实现', check: '检查',
-  rollback: '回滚', break_loop: '打破循环', update_spec: '更新规范', archive: '归档',
-};
+const DISPLAY_COPY = new Proxy({
+  planning: 'Planning', working: 'Working', waiting_permission: 'Waiting Permission',
+  waiting_question: 'Waiting for Answer', reviewing: 'Reviewing', turn_done: 'Turn Complete',
+  blocked: 'Blocked', failed: 'Failed', stale: 'Session Stale', completed: 'Completed', idle: 'Idle',
+}, {
+  get: (target, prop) => {
+    const key = String(prop);
+    const localized = t('status_' + key);
+    if (localized && localized !== 'status_' + key) return localized;
+    return target[key] || key;
+  }
+});
+const ACTION_COPY = new Proxy({
+  create: 'Create Task', brainstorm: 'Brainstorm', research: 'Research', prd: 'Draft PRD',
+  context: 'Enrich Context', activate: 'Activate Task', implement: 'Implement', check: 'Verify',
+  rollback: 'Rollback', break_loop: 'Break Loop', update_spec: 'Update Spec', archive: 'Archive',
+}, {
+  get: (target, prop) => {
+    const key = String(prop);
+    const localized = t('action_' + key);
+    if (localized && localized !== 'action_' + key) return localized;
+    return target[key] || key;
+  }
+});
 function runtimeKeyFromView(view) {
   if (!view || !view.taskId) return null;
   const project = state.projects.find(p => p.path === view.project || p.name === view.project);
@@ -665,7 +705,9 @@ function applyRuntimeSnapshot(snapshot) {
         /* 已采纳的候选不应再被去重标记占用：同一 key 后续被拒时仍可记未读 */
         state.lastUnreadCandidateKey = null;
         state.lastUnreadCandidateStamp = 0;
-        announce(`已切换到任务 ${taskTitleFor(state.focusKey) || state.focusKey}，原因是 ${DISPLAY_COPY[targetView && targetView.displayState] || '实时活动'}`);
+        announce(state.language === 'zh'
+          ? `已切换到任务 ${taskTitleFor(state.focusKey) || state.focusKey}，原因是 ${DISPLAY_COPY[targetView && targetView.displayState] || '实时活动'}`
+          : `Switched to task ${taskTitleFor(state.focusKey) || state.focusKey}: ${DISPLAY_COPY[targetView && targetView.displayState] || 'live activity'}`);
       }
     } else if (classification === 'reject') {
       /* 候选被拒绝：只增加未读提示，不改变当前任务或阅读位置。
@@ -735,7 +777,9 @@ function applyRuntimeSnapshot(snapshot) {
           state.lastUnreadCandidateStamp = 0;
           const doneTitle = taskTitleFor(oldKey) || oldKey;
           const nextTitle = taskTitleFor(nextKey) || nextKey;
-          toast(`「${doneTitle}」已完成，已切换到「${nextTitle}」`);
+          toast(state.language === 'zh'
+            ? `「${doneTitle}」已完成，已切换到「${nextTitle}」`
+            : `"${doneTitle}" completed, switched to "${nextTitle}"`);
           announce(`已完成 ${doneTitle}，已自动切换到任务 ${nextTitle}`);
         }
       }
@@ -1065,19 +1109,22 @@ async function ensureAllArchived() {
 function updateStatus() {
   const errs = Object.values(state.tasksByProject).reduce((n, b) => n + (b.errors ? b.errors.length : 0), 0);
   const active = pool().filter(unfinished).length;
-  const time = new Date().toLocaleTimeString('zh-CN', { hour12: false });
-  $('status').textContent =
-    `${state.projects.length} 个项目 · ${active} 进行中 · ${time}` + (errs ? ` · ${errs} 条解析错误` : '');
+  const time = new Date().toLocaleTimeString(state.language === 'zh' ? 'zh-CN' : 'en-US', { hour12: false });
+  const projText = state.language === 'zh' ? `${state.projects.length} 个项目` : `${state.projects.length} projects`;
+  const activeText = state.language === 'zh' ? `${active} 进行中` : `${active} in progress`;
+  const errText = errs ? (state.language === 'zh' ? ` · ${errs} 条解析错误` : ` · ${errs} parse errors`) : '';
+  $('status').textContent = `${projText} · ${activeText} · ${time}${errText}`;
 }
 async function manualRefresh() {
   await refresh(true);
   render();
-  toast('已刷新');
+  toast(state.language === 'zh' ? '已刷新' : 'Refreshed');
 }
 
 /* ---------- 渲染总入口 ---------- */
 function render() {
   if (state.view !== 'main') return;
+  if (typeof TrellisI18n !== 'undefined') TrellisI18n.applyToDom();
   document.body.dataset.mode = state.mode;
   /* 卡片模式且未翻面：高度随内容自适应（底部透明）；翻面/胶囊保持固定高度 */
   syncFit();
@@ -1109,7 +1156,7 @@ function filterOptions() {
   for (const p of state.projects) {
     allCount += (state.tasksByProject[p.name]?.tasks || []).filter(unfinished).length;
   }
-  const opts = [{ name: null, label: '全部', count: allCount, color: '#a6a7ae' }];
+  const opts = [{ name: null, label: t('all_projects'), count: allCount, color: '#a6a7ae' }];
   for (const p of state.projects) {
     const tasks = (state.tasksByProject[p.name]?.tasks || []).filter(unfinished);
     if (!tasks.length && state.filter !== p.name) continue;
@@ -1160,9 +1207,9 @@ function renderStars() {
   fillFilterStars($('treeStars'));
   fillFilterStars($('projectPop'));
   const chipLabel = $('projectChipLabel');
-  if (chipLabel) chipLabel.textContent = state.filter ? state.filter : '全部项目';
+  if (chipLabel) chipLabel.textContent = state.filter ? state.filter : t('all_projects');
   const grabName = $('grabProjectName');
-  if (grabName) grabName.textContent = state.filter ? state.filter : '全部项目';
+  if (grabName) grabName.textContent = state.filter ? state.filter : t('all_projects');
   const chip = $('btnProjectChip');
   if (chip) chip.classList.toggle('on', !!state.filter || isProjectPopOpen());
 }
@@ -1173,7 +1220,7 @@ function syncGrabHeader() {
   if (led && card) {
     const st = card.dataset.runtimeState || 'idle';
     led.dataset.state = st;
-    led.title = DISPLAY_COPY[st] || st || '空闲';
+    led.title = DISPLAY_COPY[st] || st || t('idle');
   }
 }
 function isProjectPopOpen() {
@@ -1216,8 +1263,14 @@ function renderPost(t) {
   const fill = document.createElement('div');
   fill.className = 'post-fill';
   post.appendChild(fill);
-  const laneHints = ['需求评审与上下文准备', '开发实现与工具调用', '自测、回归与问题收口', '完成、归档与交付'];
-  LANES.forEach((lab, i) => {
+  const laneNames = [t('lane_plan') || 'Plan', t('lane_work') || 'Work', t('lane_wrap') || 'Wrap', t('lane_done') || 'Done'];
+  const laneHints = [
+    t('lane_hint_plan') || 'Requirements & context preparation',
+    t('lane_hint_work') || 'Development & tool execution',
+    t('lane_hint_wrap') || 'Verification & regression resolution',
+    t('lane_hint_done') || 'Completion, archive & delivery',
+  ];
+  laneNames.forEach((lab, i) => {
     const r = document.createElement('div');
     let cls = 'rung';
     if (t) {
@@ -1225,7 +1278,7 @@ function renderPost(t) {
       else if (i === (t.lane ?? 0)) cls += ' now';
     }
     r.className = cls;
-    r.title = `${lab}：${laneHints[i]}`;
+    r.title = `${lab}: ${laneHints[i]}`;
     r.dataset.tip = r.title;
     r.setAttribute('aria-label', r.title);
     r.innerHTML = `<div class="jewel"></div><div class="lab">${lab}</div>`;
@@ -1250,7 +1303,7 @@ function metricTags(t) {
   const fps = source.match(/([0-9]+(?:\.[0-9]+)?)\s*fps/i);
   if (fps) tags.push(`帧率 ≥ ${fps[1]}fps`);
   if (!tags.length) return '';
-  return `<div class="metric-tags" aria-label="任务指标">${tags.map(tag => `<span>${esc(tag)}</span>`).join('')}</div>`;
+  return `<div class="metric-tags" aria-label="${t('task_metrics')}">${tags.map(tag => `<span>${esc(tag)}</span>`).join('')}</div>`;
 }
 
 function stageHtml(t, rt) {
@@ -1262,28 +1315,28 @@ function stageHtml(t, rt) {
   const intervene = ds === 'blocked' || ds === 'failed';
   const interventionHtml = intervene ? `
     <div class="intervene">
-      <div class="quote-label">介入上下文</div>
-      <div class="iv-row"><span class="iv-key">状态</span><span class="iv-val">${esc(DISPLAY_COPY[ds] || ds)}${t.phase && t.phase.label ? ` · ${esc(t.phase.label)}` : ''}</span></div>
-      ${rt.action ? `<div class="iv-row"><span class="iv-key">最近动作</span><span class="iv-val">${esc(ACTION_COPY[rt.action] || rt.action)}</span></div>` : ''}
-      ${rt.activity ? `<div class="iv-row"><span class="iv-key">活动</span><span class="iv-val">${esc(rt.activity)}</span></div>` : ''}
+      <div class="quote-label">${t('intervention_title')}</div>
+      <div class="iv-row"><span class="iv-key">${t('intervention_status')}</span><span class="iv-val">${esc(DISPLAY_COPY[ds] || ds)}${t.phase && t.phase.label ? ` · ${esc(t.phase.label)}` : ''}</span></div>
+      ${rt.action ? `<div class="iv-row"><span class="iv-key">${t('intervention_last_action')}</span><span class="iv-val">${esc(ACTION_COPY[rt.action] || rt.action)}</span></div>` : ''}
+      ${rt.activity ? `<div class="iv-row"><span class="iv-key">${t('intervention_activity')}</span><span class="iv-val">${esc(rt.activity)}</span></div>` : ''}
     </div>` : '';
   /* 中腰内容：excerpt > description > 子任务前几条预览 > 空提示。
      介入上下文（blocked/failed）追加到内容内部（desc 正下方），
      剩余空间由 stage-fill 弹性吸收到 intervene 之后，避免中部空白。 */
   let midHtml = '';
   if (t.excerpt) {
-    midHtml = fill(`<div class="quote-label">PRD · 摘要</div><blockquote class="excerpt">${esc(t.excerpt)}</blockquote>${interventionHtml}`);
+    midHtml = fill(`<div class="quote-label">${t('prd_excerpt_title')}</div><blockquote class="excerpt">${esc(t.excerpt)}</blockquote>${interventionHtml}`);
   } else if (t.description) {
-    midHtml = fill(`<div class="quote-label">任务描述</div><p class="desc">${esc(t.description)}</p>${interventionHtml}`);
+    midHtml = fill(`<div class="quote-label">${t('task_desc_title')}</div><p class="desc">${esc(t.description)}</p>${interventionHtml}`);
   } else if (subs.length) {
     const rows = subs.slice(0, 3).map((s) => {
       const done = s.status === 'completed';
       return `<li class="${done ? 'done' : ''}"><i></i><span>${esc(s.name)}</span></li>`;
     }).join('');
-    const more = subs.length > 3 ? `<div class="subprev-more">还有 ${subs.length - 3} 条，见下方清单</div>` : '';
-    midHtml = fill(`<div class="quote-label">子任务</div><ul class="subprev">${rows}</ul>${more}`);
+    const more = subs.length > 3 ? `<div class="subprev-more">${t('more_subtasks', { n: subs.length - 3 })}</div>` : '';
+    midHtml = fill(`<div class="quote-label">${t('subtasks_title')}</div><ul class="subprev">${rows}</ul>${more}`);
   } else {
-    midHtml = fill('<p class="desc" style="color:var(--dim)">这个任务还没有留下更多细节。</p>');
+    midHtml = fill(`<p class="desc" style="color:var(--dim)">${t('no_details_left')}</p>`);
   }
   /* 底部：子任务分段条 */
   if (subs.length) {
@@ -1293,23 +1346,23 @@ function stageHtml(t, rt) {
       const cls = s.status === 'completed' ? 'seg f' : (i === curIdx ? 'seg c' : 'seg');
       return `<i class="${cls}"></i>`;
     }).join('');
-    const curName = curIdx >= 0 ? subs[curIdx].name : '全部完成';
+    const curName = curIdx >= 0 ? subs[curIdx].name : t('all_done');
     const verificationSub = /verify|验证|回归|test|测试|check|gate/i.test(curName);
-    const subCaption = verificationSub ? '回归验证进度' : '子任务进度';
+    const subCaption = verificationSub ? t('verification_progress') : t('subtasks_progress');
     /* 下一个待办：当前之后的第一个未完成 */
     const nextIdx = curIdx >= 0 ? subs.findIndex((s, i) => i > curIdx && s.status !== 'completed') : -1;
     const nextHtml = nextIdx >= 0
-      ? `<div class="nextline">下一个 → ${esc(subs[nextIdx].name)}</div>`
-      : (curIdx >= 0 ? '<div class="nextline done-all">这是最后一步，做完就收束</div>' : '');
+      ? `<div class="nextline">${t('next_todo_prefix')}${esc(subs[nextIdx].name)}</div>`
+      : (curIdx >= 0 ? `<div class="nextline done-all">${t('last_step_wrapup')}</div>` : '');
     const open = state.subOpen === keyOf(t);
     const items = subs.map((s, i) => {
       const cls = s.status === 'completed' ? 'done' : (i === curIdx ? 'cur' : '');
       return `<li class="${cls}"><i></i><span>${esc(s.name)}</span></li>`;
     }).join('');
     return midHtml + `
-      <div class="subs${open ? ' open' : ''}" id="subsBox" tabindex="0" title="点击展开子任务清单">
+      <div class="subs${open ? ' open' : ''}" id="subsBox" tabindex="0" title="${t('subtasks_title')}">
         <div class="segs">${segs}</div>
-        <div class="sub-caption"><span>${subCaption}</span><span class="hint">${open ? '收起' : '清单'}</span></div>
+        <div class="sub-caption"><span>${subCaption}</span><span class="hint">${open ? t('collapse') : t('subtasks_checklist')}</span></div>
         <div class="subline">
           <span class="cur">${esc(curName)}</span>
           <span class="n">${doneN}/${subs.length}</span>
@@ -1332,7 +1385,7 @@ function artsMini(t) {
   return `<div class="arts-mini">
     ${flag('PRD', !!a.prd)}${flag('DESIGN', !!a.design)}${flag('IMPL', !!a.implement)}
     <span class="am-sep"></span>
-    ${cnt('调研', a.researchCount || 0)}${cnt('注入', a.implEntries || 0)}${cnt('检查', a.checkEntries || 0)}${cnt('报告', a.reportCount || 0)}
+    ${cnt(t('action_research'), a.researchCount || 0)}${cnt(t('action_context'), a.implEntries || 0)}${cnt(t('action_check'), a.checkEntries || 0)}${cnt(t('acceptance_report'), a.reportCount || 0)}
   </div>`;
 }
 /* 活跃会话徽章：多平台并列（取最新 lastSeenAt） */
@@ -1385,13 +1438,13 @@ function observeTimelineFor(rt, t) {
     entries.push(`<li><i aria-hidden="true"></i><span class="tl-label">${label}</span><span class="tl-time">${esc(relTime(stamp * 1000)) || '—'}</span></li>`);
   };
   const agent = rt && rt.agent;
-  push('会话开始', sec(agent && agent.startedAt));
-  push('最近活动', sec(agent && agent.updatedAt));
-  push('任务变更', sec(rt && rt.lastChangedAt) ?? sec(t && t.mtime / 1000));
+  push(t('timeline_session_start'), sec(agent && agent.startedAt));
+  push(t('timeline_recent_activity'), sec(agent && agent.updatedAt));
+  push(t('timeline_task_changed'), sec(rt && rt.lastChangedAt) ?? sec(t && t.mtime / 1000));
   let cls = 'observe-timeline';
   if (!entries.length) {
     /* 空态：不参与动画防闪烁（内容本来就稳定） */
-    return `<div class="observe-timeline empty" aria-hidden="true"><span>暂无活动记录</span></div>`;
+    return `<div class="observe-timeline empty" aria-hidden="true"><span>${t('no_active_records')}</span></div>`;
   }
   const html = entries.join('');
   /* 内容防闪烁：相同内容（仅 render 触发）不加动画避免重播闪烁；
@@ -1402,7 +1455,7 @@ function observeTimelineFor(rt, t) {
     if (_timelineSeen.size >= TIMELINE_SEEN_MAX) _timelineSeen.clear();
     _timelineSeen.add(html);
   }
-  return `<ul class="${cls}" aria-label="最近活动">${html}</ul>`;
+  return `<ul class="${cls}" aria-label="${t('timeline_recent_activity')}">${html}</ul>`;
 }
 
 /* ---------- 主卡片 ---------- */
@@ -1416,7 +1469,7 @@ function renderProjectActivityCard(activity) {
     activity.activity,
     activity.toolName,
     null,
-    '会话正在运行',
+    t('status_session_running'),
     { eventName: activity.eventName, toolInput: activity.toolInput },
   );
   const rawActivity = String(activity.activity || '').trim();
@@ -1433,30 +1486,30 @@ function renderProjectActivityCard(activity) {
   main.innerHTML = `
     <div class="pane">
       ${'' /* .head observe-head 已平移到 header，避免重复显示 */}
-      <h2 class="title">${esc(agent)} 项目会话</h2>
+      <h2 class="title">${esc(t('project_session_title', { agent }))}</h2>
       ${observeTimelineFor(rtLike, null)}
       <div class="runtime-hero state-${esc(displayState.replaceAll('_', '-'))}">
         ${observeLedFor(displayState)}
         <div class="observe-hero-inner">
-        <div class="runtime-state-line"><span class="runtime-status-icon" aria-hidden="true">${icon(runtimeStateIcon(displayState), 15)}</span><strong id="runtime-state">${esc(semanticActivity || '会话正在运行')}</strong></div>
-        <div id="runtime-activity" class="runtime-activity observe-stream">${runtimeActivityHtml(rawActivity || '最近没有 Agent 活动')}</div>
+        <div class="runtime-state-line"><span class="runtime-status-icon" aria-hidden="true">${icon(runtimeStateIcon(displayState), 15)}</span><strong id="runtime-state">${esc(semanticActivity || t('status_session_running'))}</strong></div>
+        <div id="runtime-activity" class="runtime-activity observe-stream">${runtimeActivityHtml(rawActivity || t('status_no_agent_activity'))}</div>
         </div>
       </div>
       <div class="runtime-row">
-        <span class="runtime-phase">项目级 · 未绑定 Trellis task</span>
-        <span class="runtime-progress">实时</span>
+        <span class="runtime-phase">${t('project_session_desc')}</span>
+        <span class="runtime-progress">${t('live_label')}</span>
       </div>
       <div class="meta rule"><span class="chip br">${esc(project)}</span></div>
       <div class="stage"><div class="stage-fill">
-        <div class="quote-label">会话来源</div>
+        <div class="quote-label">${t('session_source')}</div>
         <div class="proj-context">
-          <div class="pc-row"><span class="pc-key">Agent</span><span class="pc-val">${esc(agent)}</span></div>
-          <div class="pc-row"><span class="pc-key">路径</span><span class="pc-val">${esc(project)}</span></div>
-          <div class="pc-row"><span class="pc-key">最近活动</span><span class="pc-val">${esc(semanticActivity || '会话正在运行')}</span></div>
-          <div class="pc-row"><span class="pc-key">更新</span><span class="pc-val">${esc(relTime(updatedAt)) || '—'}</span></div>
+          <div class="pc-row"><span class="pc-key">${t('session_agent')}</span><span class="pc-val">${esc(agent)}</span></div>
+          <div class="pc-row"><span class="pc-key">${t('session_path')}</span><span class="pc-val">${esc(project)}</span></div>
+          <div class="pc-row"><span class="pc-key">${t('session_recent_activity')}</span><span class="pc-val">${esc(semanticActivity || t('status_session_running'))}</span></div>
+          <div class="pc-row"><span class="pc-key">${t('session_updated')}</span><span class="pc-val">${esc(relTime(updatedAt)) || '—'}</span></div>
         </div>
       </div></div>
-      <div class="foot"><span class="fid">${esc(activity.sessionId || 'session')}</span><span id="runtime-updated" class="when">更新于 ${esc(relTime(updatedAt)) || '—'}</span></div>
+      <div class="foot"><span class="fid">${esc(activity.sessionId || 'session')}</span><span id="runtime-updated" class="when">${t('updated_at_prefix')}${esc(relTime(updatedAt)) || '—'}</span></div>
     </div>`;
   /* 项目级会话：header meter 显示 AI（无 lane 进度） */
   const grabMeter = $('grabMeter');
@@ -1483,8 +1536,8 @@ function renderCard(t, projectActivity) {
     grid.classList.add('center');
     renderPost(null);
     main.innerHTML = waitingForHook
-      ? `<div class="idle"><div class="w">等待项目接入</div><p>当前还没有项目<br/>打开设置安装 Hook，Agent 运行 Trellis 项目时会自动出现在这里</p></div>`
-      : `<div class="idle"><div class="w">没有找到项目</div><p>当前根目录里没有 Trellis 项目<br/>打开设置调整扫描范围</p></div>`;
+      ? `<div class="idle"><div class="w">${t('empty_waiting_hook')}</div><p>${t('empty_waiting_hook_desc')}</p></div>`
+      : `<div class="idle"><div class="w">${t('empty_no_projects')}</div><p>${t('empty_no_projects_desc')}</p></div>`;
   } else if (t) {
     /* 任务候选优先于项目级会话：blocked/failed/waiting 等即使无 agent 也必须显示任务卡 */
     grid.classList.remove('center');
@@ -1505,23 +1558,23 @@ function renderCard(t, projectActivity) {
     }).join('');
     const archiveReceipt = archiveReceiptFor(fKey);
     const actionLabel = rt.action ? (ACTION_COPY[rt.action] || rt.action) : '';
-    const semanticActivity = archiveReceipt ? '已归档' : displayActivity(
+    const semanticActivity = archiveReceipt ? t('archived') : displayActivity(
       rt.activity,
       rt.agent && rt.agent.toolName,
       rt.action,
-      actionLabel ? `${actionLabel} · 等待下一条事件` : '最近没有 Agent 活动',
+      actionLabel ? t('status_waiting_next_event', { action: actionLabel }) : t('status_no_agent_activity'),
       { eventName: rt.agent && rt.agent.eventName, toolInput: rt.agent && rt.agent.toolInput },
     );
     const rawActivity = (archiveReceipt && archiveReceipt.rawActivity) || String(rt.activity || '').trim();
     const runtimeNotice = archiveReceipt
-      ? `<div class="runtime-unread archive-receipt" role="status"><span class="archive-receipt-copy">${icon('check', 11)}<span>任务已归档，当前任务已保留</span></span><button type="button" class="mini" data-next-after-archive>${icon('arrow-right', 10)}<span>查看下一个任务</span></button></div>`
-      : (state.runtimeUnreadCount > 0 ? `<div class="runtime-unread">${state.runtimeNotice || '有未查看的实时活动'} · ${state.runtimeUnreadCount}<button type="button" class="mini" data-clear-unread>查看未读活动</button></div>` : '');
+      ? `<div class="runtime-unread archive-receipt" role="status"><span class="archive-receipt-copy">${icon('check', 11)}<span>${t('task_archived_retained')}</span></span><button type="button" class="mini" data-next-after-archive>${icon('arrow-right', 10)}<span>${t('view_next_task')}</span></button></div>`
+      : (state.runtimeUnreadCount > 0 ? `<div class="runtime-unread">${state.runtimeNotice || t('unread_live_activity')} · ${state.runtimeUnreadCount}<button type="button" class="mini" data-clear-unread>${t('view_unread_activity')}</button></div>` : '');
     const phaseLabel = t.phase && t.phase.label ? t.phase.label : (rt.phase || '—');
     const doneN = (t.subtasks || []).filter(s => s.status === 'completed' || s.status === 'done').length;
-    const subLabel = (t.subtasks || []).length ? ` · 子任务 ${doneN}/${t.subtasks.length}` : '';
+    const subLabel = (t.subtasks || []).length ? ` · ${t('subtasks_title')} ${doneN}/${t.subtasks.length}` : '';
     const taskProgress = Math.round((t.progress || 0) * 100);
     const frontRefined = document.body.dataset.layout === 'front-refined';
-    const progressLabel = frontRefined ? `开发 ${taskProgress}%` : `${taskProgress}%${esc(subLabel)}`;
+    const progressLabel = frontRefined ? `Dev ${taskProgress}%` : `${taskProgress}%${esc(subLabel)}`;
     const priorityClass = t.priority ? ` priority-${String(t.priority).toLowerCase()}` : '';
     const updatedAt = rt.lastChangedAt ? rt.lastChangedAt * 1000 : t.mtime;
     main.innerHTML = `
@@ -1532,7 +1585,7 @@ function renderCard(t, projectActivity) {
           ${observeLedFor(displayState)}
           <div class="observe-hero-inner">
           <div class="runtime-state-line"><span class="runtime-status-icon" aria-hidden="true">${icon(runtimeStateIcon(displayState), 15)}</span><strong id="runtime-state">${esc(semanticActivity || DISPLAY_COPY[displayState] || displayState)}</strong></div>
-        <div id="runtime-activity" class="runtime-activity observe-stream">${runtimeActivityHtml(rawActivity || (archiveReceipt ? '归档操作已完成' : '最近没有 Agent 活动'))}</div>
+        <div id="runtime-activity" class="runtime-activity observe-stream">${runtimeActivityHtml(rawActivity || (archiveReceipt ? t('status_archive_completed') : t('status_no_agent_activity')))}</div>
           ${runtimeNotice}
           ${`<button type="button" class="focus-control" data-focus-lock aria-pressed="${state.focusMode === 'manual'}">${focusLockHtml(state.focusMode === 'manual')}</button>`}
           </div>
@@ -1543,7 +1596,7 @@ function renderCard(t, projectActivity) {
         </div>
         <div class="meta${t.artifacts ? '' : ' rule'}">
           ${t.priority ? `<span class="chip priority${priorityClass}">${esc(t.priority)}</span>` : ''}
-          ${t.workflow ? `<span class="chip workflow-chip" title="工作流变体: ${esc(t.workflow)}">${esc(t.workflow)}</span>` : ''}
+          ${t.workflow ? `<span class="chip workflow-chip" title="Workflow: ${esc(t.workflow)}">${esc(t.workflow)}</span>` : ''}
           ${t.branch ? `<span class="chip br branch-meta">${esc(t.branch)}</span>` : ''}
           ${liveBadge(t)}
         </div>
@@ -1551,7 +1604,7 @@ function renderCard(t, projectActivity) {
         <div class="stage">${stageHtml(t, rt)}</div>
         <div class="foot">
           <span class="fid">${esc(t.id)}</span>
-          <span id="runtime-updated" class="when">更新于 ${esc(relTime(updatedAt)) || '—'}</span>
+          <span id="runtime-updated" class="when">${t('updated_at_prefix')}${esc(relTime(updatedAt)) || '—'}</span>
         </div>
       </div>`;
     /* header meter：ticks 刻度 + score 百分比（原 .head observe-head 内容平移到 header） */
@@ -1563,7 +1616,7 @@ function renderCard(t, projectActivity) {
       const toggle = () => {
         state.subOpen = state.subOpen === fKey ? null : fKey;
         box.classList.toggle('open', state.subOpen === fKey);
-        box.querySelector('.hint').textContent = state.subOpen === fKey ? '收起' : '清单';
+        box.querySelector('.hint').textContent = state.subOpen === fKey ? t('collapse') : t('subtasks_checklist');
         scheduleWindowFit();
       };
       box.onclick = toggle;
@@ -1597,7 +1650,7 @@ function renderCard(t, projectActivity) {
     card.dataset.kind = 'idle';
     grid.classList.add('center');
     renderPost(null);
-    main.innerHTML = `<div class="idle"><div class="w">空闲</div><p>没有进行中的任务<br/>开一个 Trellis task 再回来</p></div>`;
+    main.innerHTML = `<div class="idle"><div class="w">${t('empty_idle')}</div><p>${t('empty_idle_desc')}</p></div>`;
   }
 
   /* 动效：首次进入 stagger；聚焦切换时内容滑动淡入（GSAP 缺失 / 减少动态时跳过） */
@@ -1861,7 +1914,7 @@ function openUnreadActivity() {
 
   const evidence = latestUnreadEvidence();
   if (state.unreadEvidenceQueue.length && !evidence) {
-    toast('未找到未读活动对应的任务，请刷新后重试');
+    toast(state.language === 'zh' ? '未找到未读活动对应的任务，请刷新后重试' : 'Task for unread activity not found. Please refresh and try again.');
     render();
     return false;
   }
@@ -1939,27 +1992,31 @@ function renderBack(t, docs, loading, error) {
   const rt = runtimeViewForTask(t);
   const phaseTrail = [t.phase && t.phase.id, rt.action, rt.displayState].filter(Boolean).map((item) => esc(DISPLAY_COPY[item] || ACTION_COPY[item] || item)).join(' → ');
   const runtimeTrail = rt.agent
-    ? `<li><i></i>${esc(DISPLAY_COPY[rt.displayState] || rt.displayState)} · ${esc(rt.agent.toolName || rt.action || 'Agent')} · ${esc(relTime((rt.agent.updatedAt || 0) * 1000) || '刚刚')}</li>`
-    : '<li><i></i>暂无实时 Agent 事件</li>';
+    ? `<li><i></i>${esc(DISPLAY_COPY[rt.displayState] || rt.displayState)} · ${esc(rt.agent.toolName || rt.action || 'Agent')} · ${esc(relTime((rt.agent.updatedAt || 0) * 1000) || t('just_now'))}</li>`
+    : `<li><i></i>${t('no_live_events')}</li>`;
   /* 文档标签：默认选中 PRD（或第一个），切换记忆在本次聚焦内 */
   let docsHtml = '';
   if (loading) {
-    docsHtml = '<div class="doc dim">文档加载中…</div>';
+    docsHtml = `<div class="doc dim">${t('doc_loading')}</div>`;
   } else if (error) {
     docsHtml = [
       '<div class="doc dim">',
-      '<p>文档读取失败：' + esc(error) + '</p>',
-      '<button type="button" class="mini" data-retry-doc>重新加载</button>',
+      '<p>' + t('doc_read_failed') + esc(error) + '</p>',
+      `<button type="button" class="mini" data-retry-doc>${t('reload_doc')}</button>`,
       '</div>',
     ].join('');
   } else if (!docs || !docs.length) {
-    docsHtml = '<div class="doc dim">（这个任务还没有任何 markdown 文档）</div>';
+    docsHtml = `<div class="doc dim">${t('no_markdown_docs')}</div>`;
   } else {
     const sel = docs.find(d => d.name === state.docSel) || docs[0];
     state.docSel = sel.name;
-    const tabs = docs.map(d =>
-      `<button type="button" class="dtab${d.name === sel.name ? ' on' : ''}" data-doc="${esc(d.name)}">${esc(d.label)}</button>`
-    ).join('');
+    const tabs = docs.map(d => {
+      let label = d.label;
+      if (d.name && d.name.startsWith('acceptance-report')) {
+        label = t('acceptance_report');
+      }
+      return `<button type="button" class="dtab${d.name === sel.name ? ' on' : ''}" data-doc="${esc(d.name)}">${esc(label)}</button>`;
+    }).join('');
     docsHtml = `
       <div class="dtabs">${tabs}</div>
       <div class="doc">${mdRender(sel.content)}</div>`;
@@ -1977,7 +2034,7 @@ function renderBack(t, docs, loading, error) {
     });
     if (matchedSpecs.length) {
       governingHtml = `<div class="governing-specs">
-        <div class="b-label">约束规范 · ${matchedSpecs.length}</div>
+        <div class="b-label">${t('governing_specs')} · ${matchedSpecs.length}</div>
         <div class="governing-specs-chips">${matchedSpecs.map(s =>
           `<span class="governing-spec-chip" title="${esc(s.path)}${s.paths && s.paths.length ? `&#10;约束: ${esc(s.paths.join(', '))}` : ''}">${esc(s.name)}</span>`
         ).join('')}</div>
@@ -1987,11 +2044,11 @@ function renderBack(t, docs, loading, error) {
   const detailMetrics = metricTags(t);
   const inspectMode = state.evidenceTarget && keyOf(state.evidenceTarget) === keyOf(t) ? 'evidence' : 'detail';
   const inspectHeader = inspectMode === 'evidence'
-    ? `<div class="inspect-h"><span class="inspect-mode">活动证据</span><span class="inspect-task" title="${esc(t.title || t.id)}">${esc(t.title || t.id)}</span></div>`
+    ? `<div class="inspect-h"><span class="inspect-mode">${t('inspect_evidence')}</span><span class="inspect-task" title="${esc(t.title || t.id)}">${esc(t.title || t.id)}</span></div>`
     : '';
   const detailState = rt.displayState || 'idle';
   const detailPhase = t.phase && t.phase.label ? t.phase.label : (rt.phase || DISPLAY_COPY[detailState] || '—');
-  const detailActivity = rt.activity || (rt.action ? `${ACTION_COPY[rt.action] || rt.action} · 等待下一条事件` : '最近没有 Agent 活动');
+  const detailActivity = rt.activity || (rt.action ? t('status_waiting_next_event', { action: ACTION_COPY[rt.action] || rt.action }) : t('status_no_agent_activity'));
   const detailStatus = inspectMode === 'detail' ? `
       <div class="detail-status-line state-${esc(detailState.replaceAll('_', '-'))}" title="${esc(detailActivity)}">
         <span class="detail-status-icon" aria-hidden="true">${icon(runtimeStateIcon(detailState), 14)}</span>
@@ -2001,9 +2058,9 @@ function renderBack(t, docs, loading, error) {
       </div>` : '';
   const runtimeEvidence = inspectMode === 'evidence' ? `
       <div class="runtime-evidence">
-        <div class="b-label">未读活动证据</div>
+        <div class="b-label">${t('unread_activity_evidence')}</div>
         <div class="phase-trail">${phaseTrail || '—'}</div>
-        <div class="runtime-back-activity">${esc(rt.activity || '暂无活动摘要')}</div>
+        <div class="runtime-back-activity">${esc(rt.activity || t('no_activity_summary'))}</div>
         <ul id="runtime-timeline" class="runtime-timeline">${runtimeTrail}</ul>
       </div>` : '';
   back.innerHTML = `
@@ -2012,7 +2069,7 @@ function renderBack(t, docs, loading, error) {
       ${detailStatus}
       ${artsMini(t)}
       ${governingHtml}
-      ${detailMetrics ? `<div class="detail-metrics"><div class="b-label">任务指标</div>${detailMetrics}</div>` : ''}
+      ${detailMetrics ? `<div class="detail-metrics"><div class="b-label">${t('task_metrics')}</div>${detailMetrics}</div>` : ''}
       ${runtimeEvidence}
       ${docsHtml}
     </div>`;
@@ -2091,7 +2148,7 @@ function renderTree(focused) {
   indexedTasks = [];
   const ul = $('tree');
   ul.setAttribute('role', 'tree');
-  ul.setAttribute('aria-label', '任务树');
+  ul.setAttribute('aria-label', t('task_tree'));
   ul.innerHTML = '';
   let total = 0;
 
@@ -2132,9 +2189,9 @@ function renderTree(focused) {
   }
 
   if (!total) {
-    ul.innerHTML = '<li class="tree-empty">暂无任务</li>';
+    ul.innerHTML = `<li class="tree-empty">${t('no_tasks')}</li>`;
   }
-  $('listCount').textContent = `${total} 个任务`;
+  $('listCount').textContent = t('tasks_count', { n: total });
 }
 function taskNode(task, kids, focused, level) {
   const li = document.createElement('li');
@@ -2170,20 +2227,20 @@ function taskNode(task, kids, focused, level) {
   row.innerHTML = `
     <span class="idx">${num}</span>
     ${hasKids ? `<button type="button" class="disclosure" data-key="${esc(key)}" tabindex="0"
-      aria-label="${collapsed ? '展开' : '收起'} ${esc(task.title || task.id)}"
+      aria-label="${collapsed ? t('expand') : t('collapse')} ${esc(task.title || task.id)}"
       aria-expanded="${!collapsed}" aria-controls="kids-${esc(key.replace(/[^A-Za-z0-9_-]/g, '-') || 'x')}">
       <span class="car" aria-hidden="true">${collapsed ? icon('chevron-right', 10) : icon('chevron-down', 10)}</span></button>` : '<span class="disclosure-slot" aria-hidden="true"></span>'}
     <span class="d" style="background:${color};color:${color}"></span>
     <div class="meta2">
       <div class="tline">
         <div class="t">${isSelected ? `<i class="sel-mark" aria-hidden="true">${icon('check', 9)}</i>` : ''}${esc(task.title || task.id)}</div>
-        ${isLive(task) ? '<span class="live-dot" title="有活跃会话"></span>' : ''}
+        ${isLive(task) ? `<span class="live-dot" title="${t('live_session')}"></span>` : ''}
         <div class="bar"><i style="width:${pct}%;background:${color}"></i></div>
       </div>
-      <div class="sub">${task.archived ? '<span class="archived-tag" title="已归档任务，仅查看">已归档</span>' : ''}${task.workflow ? `<span class="wf-tag" title="工作流: ${esc(task.workflow)}">${esc(task.workflow)}</span>` : ''}${esc(subLabel)}</div>
+      <div class="sub">${task.archived ? `<span class="archived-tag" title="${t('archived_task_tip')}">${t('archived')}</span>` : ''}${task.workflow ? `<span class="wf-tag" title="Workflow: ${esc(task.workflow)}">${esc(task.workflow)}</span>` : ''}${esc(subLabel)}</div>
     </div>
-    ${task.archived ? '<span class="lane archived-lane" title="已归档">·</span>' : `<button type="button" class="tree-archive" data-key="${esc(key)}" title="归档 ${esc(task.title || task.id)}"
-      aria-label="归档 ${esc(task.title || task.id)}">归档</button>`}
+    ${task.archived ? `<span class="lane archived-lane" title="${t('archived')}">·</span>` : `<button type="button" class="tree-archive" data-key="${esc(key)}" title="${t('action_archive')} ${esc(task.title || task.id)}"
+      aria-label="${t('action_archive')} ${esc(task.title || task.id)}">${t('action_archive')}</button>`}
     <span class="lane" title="${esc(subLabel)}">${esc(laneLabel)}</span>`;
   const pick = () => focusTask(task);
   /* 点击行主体：选中（不切换展开） */
@@ -2250,7 +2307,7 @@ async function archiveTreeTask(task, btn) {
   }
   try {
     await call('archive_task', { project: task.projectPath || task.project, task: task.dir || task.id });
-    toast(`已归档：${task.title || task.id}`);
+    toast(state.language === 'zh' ? `已归档：${task.title || task.id}` : `Archived: ${task.title || task.id}`);
     /* 归档改变了 archive/ 内容：失效该项目的归档缓存，下次 ensureArchived 重拉，
        避免已加载的 archivedTasks 停留在旧状态（新归档任务消失）。 */
     invalidateArchived(task.project);
@@ -2258,7 +2315,7 @@ async function archiveTreeTask(task, btn) {
     if (state.showArchived) await ensureArchived(task.project);
     if (state.view === 'main') render();
   } catch (e) {
-    toast(`归档失败：${errMsg(e)}`);
+    toast(state.language === 'zh' ? `归档失败：${errMsg(e)}` : `Archive failed: ${errMsg(e)}`);
   } finally {
     if (btn) {
       btn.disabled = false;
@@ -2287,15 +2344,21 @@ function collectAncestors(task, byId) {
    - 属性泳道过滤（dev_type）
    - 父子树骨架（复用 buildTree 层级，节点带 dev 徽章 + spec chip） */
 function devTypeLabel(v) {
-  const map = { frontend: '前端', backend: '后端', fullstack: '全栈', test: '测试', docs: '文档' };
+  const map = {
+    frontend: t('lane_frontend') || 'Frontend',
+    backend: t('lane_backend') || 'Backend',
+    fullstack: 'Fullstack',
+    test: t('lane_test') || 'Test',
+    docs: t('lane_docs') || 'Docs'
+  };
   return map[v] || v;
 }
 const REL_LANES = [
-  { key: 'all', label: '全部' },
-  { key: 'frontend', label: '前端' },
-  { key: 'backend', label: '后端' },
-  { key: 'test', label: '测试' },
-  { key: 'docs', label: '文档' },
+  { key: 'all', label: 'All' },
+  { key: 'frontend', label: 'Frontend' },
+  { key: 'backend', label: 'Backend' },
+  { key: 'test', label: 'Test' },
+  { key: 'docs', label: 'Docs' },
 ];
 /* 泳道过滤：只保留 dev_type === lane 的任务（含子任务中匹配的） */
 function relLaneFiltered(relTasks) {
@@ -2319,20 +2382,20 @@ function renderRelations(focused) {
 
   /* 顶部 tab：两行——第一行视图切换（任务/关联/规范），第二行项目 tab */
   const REL_VIEWS = [
-    { key: 'tasks', label: '任务' },
-    { key: 'links', label: '关联' },
-    { key: 'specs', label: '规范' },
+    { key: 'tasks', label: t('rel_view_tasks') },
+    { key: 'links', label: t('rel_view_links') },
+    { key: 'specs', label: t('rel_view_specs') },
   ];
   const VIEW_HINT = {
-    tasks: '任务状态 · 进度 · 待办 · 活跃会话',
-    links: '任务间共享同一决策/分析文档 = 同族关联',
-    specs: '项目沉淀的通用规范（trellis-update-spec）',
+    tasks: t('rel_hint_tasks'),
+    links: t('rel_hint_links'),
+    specs: t('rel_hint_specs'),
   };
   lanes.innerHTML =
     /* 第一行：目录（项目 tab，大号突出，放最上面） */
     `<div class="lanes-row lanes-proj">` +
     [null, ...state.projects.map(p => p.name)].map(name =>
-      `<button type="button" class="lane-chip proj-tab${state.filter === name ? ' on' : ''}" data-proj="${esc(name || '')}">${name ? esc(name) : '全部项目'}</button>`
+      `<button type="button" class="lane-chip proj-tab${state.filter === name ? ' on' : ''}" data-proj="${esc(name || '')}">${name ? esc(name) : t('all_projects')}</button>`
     ).join('') +
     `</div>` +
     /* 第二行：视图模块（小号 chip，放下面） */
@@ -2436,7 +2499,7 @@ function renderRelations(focused) {
     }
     relCount = specMap.size;
     if (!specMap.size) {
-      html += `<div class="tree-empty">暂无项目规范</div>`;
+      html += `<div class="tree-empty">${t('no_spec_content')}</div>`;
     } else {
       /* 每个 spec 被多少任务引用（specRefs 交集），体现规范的实际使用 */
       const refCount = new Map();
@@ -2450,21 +2513,21 @@ function renderRelations(focused) {
           <span class="rel-spec-name" title="${esc(s.path)}">${esc(s.name)}</span>
           <span class="rel-spec-meta">
             <span class="rel-spec-cat">${showProject && s.project ? `${esc(s.project)} · ` : ''}${esc(s.category)}</span>
-            <span class="rel-spec-status">${s.filled ? '✓ 已沉淀' : '○ 空模板'}</span>
-            <span class="rel-spec-lines">${s.lineCount} 行</span>
-            ${refCount.get(s.path) ? `<span class="rel-spec-refs">${refCount.get(s.path)} 任务用</span>` : ''}
-            ${s.paths && s.paths.length ? `<span class="rel-spec-paths-count" title="约束路径:\n${esc(s.paths.join('\n'))}">${s.paths.length} 约束</span>` : ''}
+            <span class="rel-spec-status">${s.filled ? ('✓ ' + t('spec_filled')) : ('○ ' + t('spec_template'))}</span>
+            <span class="rel-spec-lines">${t('lines_count', { n: s.lineCount })}</span>
+            ${refCount.get(s.path) ? `<span class="rel-spec-refs">${t('tasks_used', { n: refCount.get(s.path) })}</span>` : ''}
+            ${s.paths && s.paths.length ? `<span class="rel-spec-paths-count" title="Constraint paths:\n${esc(s.paths.join('\n'))}">${t('constraints_count', { n: s.paths.length })}</span>` : ''}
           </span>
         </summary>
-        ${s.paths && s.paths.length ? `<div class="rel-spec-paths-chips" title="约束路径模式">${s.paths.map(p => `<code class="rel-spec-path-chip" title="${esc(p)}">${esc(p)}</code>`).join('')}</div>` : ''}
-        <div class="rel-spec-body doc">${s.content ? mdRender(s.content, false) : '<span class="dim">（空）</span>'}</div>
+        ${s.paths && s.paths.length ? `<div class="rel-spec-paths-chips" title="Constraint path patterns">${s.paths.map(p => `<code class="rel-spec-path-chip" title="${esc(p)}">${esc(p)}</code>`).join('')}</div>` : ''}
+        <div class="rel-spec-body doc">${s.content ? mdRender(s.content, false) : `<span class="dim">${t('empty_dim')}</span>`}</div>
       </details>`;
       /* 渲染按 category 聚合的组（分类组默认全部展开），组内 spec 卡片 */
       const renderCatGrid = (specs, expandPreview, showProject) => {
         const filledSpecs = specs.filter(s => s.filled);
         const emptySpecs = specs.filter(s => !s.filled);
-        return (filledSpecs.length ? `<div class="rel-spec-sub-label">已沉淀（${filledSpecs.length}）</div><div class="rel-spec-grid">${filledSpecs.map(s => specCard(s, expandPreview, showProject)).join('')}</div>` : '')
-          + (emptySpecs.length ? `<details class="rel-spec-empty-group"><summary>空模板（${emptySpecs.length}）· 待填充 ▸</summary><div class="rel-spec-grid">${emptySpecs.map(s => specCard(s, expandPreview, showProject)).join('')}</div></details>` : '');
+        return (filledSpecs.length ? `<div class="rel-spec-sub-label">${t('specs_filled_count', { n: filledSpecs.length })}</div><div class="rel-spec-grid">${filledSpecs.map(s => specCard(s, expandPreview, showProject)).join('')}</div>` : '')
+          + (emptySpecs.length ? `<details class="rel-spec-empty-group"><summary>${t('specs_empty_count', { n: emptySpecs.length })}</summary><div class="rel-spec-grid">${emptySpecs.map(s => specCard(s, expandPreview, showProject)).join('')}</div></details>` : '');
       };
       /* 渲染一个 category 组：分类组默认展开，组内是 spec 网格 */
       const renderCatGroup = (cat, specs, gridHtml) => {
@@ -2472,11 +2535,11 @@ function renderRelations(focused) {
         const gcollapsed = relCollapsed.has(gkey);   /* 分类组默认展开 */
         const filledCount = specs.filter(s => s.filled).length;
         html += `<div class="rel-board-group">
-          <div class="rel-board-group-h rel-board-group-toggle" data-group="${esc(gkey)}" title="展开/收起">
+          <div class="rel-board-group-h rel-board-group-toggle" data-group="${esc(gkey)}" title="Collapse/Expand">
             <span class="rel-board-caret">${gcollapsed ? '▸' : '▾'}</span>
             <span class="rel-board-group-dot" style="background:#4aa3ff"></span>
             <span class="rel-board-group-name">${esc(cat)}</span>
-            <span class="rel-board-group-count">${filledCount} 已沉淀</span>
+            <span class="rel-board-group-count">${t('specs_filled_count', { n: filledCount })}</span>
           </div>
           ${gcollapsed ? '' : gridHtml}
         </div>`;
@@ -2520,14 +2583,14 @@ function renderRelations(focused) {
       const batchTasks = [...(parent ? [parent] : []), ...siblings, ...children].filter(Boolean);
       html += `<div class="rel-link-panel">
         <div class="rel-link-h">
-          <span class="rel-link-title">「${esc((centerTask.title || centerTask.id).slice(0, 30))}」的关联</span>
+          <span class="rel-link-title">${esc(t('relations_of', { name: (centerTask.title || centerTask.id).slice(0, 30) }))}</span>
           <button type="button" class="rel-link-close" data-clear-center>×</button>
         </div>
-        ${batchTasks.length ? `<div class="rel-link-row"><span class="rel-link-label">同批次</span>${batchTasks.map(t =>
+        ${batchTasks.length ? `<div class="rel-link-row"><span class="rel-link-label">${t('same_batch')}</span>${batchTasks.map(t =>
           `<button type="button" class="rel-link-chip" data-key="${esc(keyOf(t))}">${esc((t.title || t.id).slice(0, 18))}</button>`).join('')}</div>` : ''}
-        ${sharedTasks.length ? `<div class="rel-link-row"><span class="rel-link-label">共享文件</span>${sharedTasks.map(t =>
+        ${sharedTasks.length ? `<div class="rel-link-row"><span class="rel-link-label">${t('shared_files')}</span>${sharedTasks.map(t =>
           `<button type="button" class="rel-link-chip" data-key="${esc(keyOf(t))}">${esc((t.title || t.id).slice(0, 18))}</button>`).join('')}</div>` : ''}
-        ${!batchTasks.length && !sharedTasks.length ? '<div class="rel-link-row dim">该任务暂无关联</div>' : ''}
+        ${!batchTasks.length && !sharedTasks.length ? `<div class="rel-link-row dim">${t('no_relations')}</div>` : ''}
       </div>`;
     }
     /* 关联视图只展示「共享文件」关联（父子已在任务视图展示，不重复）。
@@ -2623,8 +2686,8 @@ function renderRelations(focused) {
         html += `<div class="rel-board-group">
           <div class="rel-board-group-h">
             <span class="rel-board-group-dot" style="background:#45c4a0"></span>
-            <span class="rel-board-group-name">活跃任务</span>
-            <span class="rel-board-group-count">${liveTasks.length} 正在处理</span>
+            <span class="rel-board-group-name">${t('active_tasks_group')}</span>
+            <span class="rel-board-group-count">${t('processing_count', { n: liveTasks.length })}</span>
           </div>
           <div class="rel-board-cards">${liveTasks.map(card).join('')}</div>
         </div>`;
@@ -2639,11 +2702,11 @@ function renderRelations(focused) {
         }
         const collapsed = relCollapsed.has(gKey);
         html += `<div class="rel-board-group${isDoneGroup ? ' done-group' : ''}">
-          <div class="rel-board-group-h rel-board-group-toggle" data-group="${esc(gKey)}" title="展开/收起">
+          <div class="rel-board-group-h rel-board-group-toggle" data-group="${esc(gKey)}" title="Expand/Collapse">
             <span class="rel-board-caret">${collapsed ? '▸' : '▾'}</span>
             <span class="rel-board-group-dot" style="background:${g.parent.archived ? '#63656e' : isDoneGroup ? '#45c4a0' : '#f0a35e'}"></span>
             <span class="rel-board-group-name" title="${esc(g.parent.title || g.parent.id)}">${esc((g.parent.title || g.parent.id).slice(0, 40))}</span>
-            <span class="rel-board-group-count">${g.kids.length} 子任务${isDoneGroup ? '' : ` · ${pct}%`}</span>
+            <span class="rel-board-group-count">${t('subtasks_title')} ${g.kids.length}${isDoneGroup ? '' : ` · ${pct}%`}</span>
           </div>
           ${collapsed ? '' : `<div class="rel-board-cards">${g.kids.map(card).join('')}</div>`}
         </div>`;
@@ -2669,11 +2732,11 @@ function renderRelations(focused) {
         const now = Date.now();
         const DAY = 24 * 3600 * 1000;
         const buckets = [
-          { key: 'today', label: '今天', max: DAY, color: '#45c4a0' },
-          { key: '3d', label: '三天内', max: 3 * DAY, color: '#8b7cf6' },
-          { key: '7d', label: '七天内', max: 7 * DAY, color: '#4aa3ff' },
-          { key: '30d', label: '一个月内', max: 30 * DAY, color: '#f0a35e' },
-          { key: 'older', label: '更早', max: Infinity, color: '#63656e' },
+          { key: 'today', label: t('today'), max: DAY, color: '#45c4a0' },
+          { key: '3d', label: t('within_3d'), max: 3 * DAY, color: '#8b7cf6' },
+          { key: '7d', label: t('within_7d'), max: 7 * DAY, color: '#4aa3ff' },
+          { key: '30d', label: t('within_30d'), max: 30 * DAY, color: '#f0a35e' },
+          { key: 'older', label: t('older'), max: Infinity, color: '#63656e' },
         ];
         const inBucket = (t, b) => {
           const age = Math.max(0, now - taskLastTs(t));
@@ -2685,7 +2748,7 @@ function renderRelations(focused) {
         html += `<div class="rel-board-group">
           <div class="rel-board-group-h">
             <span class="rel-board-group-dot" style="background:#8b7cf6"></span>
-            <span class="rel-board-group-name">独立任务</span>
+            <span class="rel-board-group-name">${t('standalone_group')}</span>
             <span class="rel-board-group-count">${orphans.length}</span>
           </div>
           <div class="rel-board-time-buckets">`;
@@ -2834,7 +2897,9 @@ function toggleAutoFollow() {
   }
   /* 关闭开关时不清未读（保留 evidence 入口），开启时不触碰 focusMode/focusLockUntil */
   savePrefs();
-  toast(state.autoFollowImportant ? '已开启自动跟随实时活动' : '已关闭自动跟随实时活动');
+  toast(state.autoFollowImportant
+    ? (state.language === 'zh' ? '已开启自动跟随实时活动' : 'Auto-follow enabled')
+    : (state.language === 'zh' ? '已关闭自动跟随实时活动' : 'Auto-follow disabled'));
   render();
 }
 
@@ -2888,8 +2953,8 @@ function renderCapsule(t, projectActivity) {
 
   let displayState = 'idle';
   let rt = null;   /* 主任务 runtime view，供收缩态工具 badge 读取 */
-  let title = '暂无活跃任务';
-  let semanticActivity = '没有进行中的任务';
+  let title = t('empty_idle');
+  let semanticActivity = t('empty_idle_desc');
   let rawActivity = '';
   let progressText = '';
   let progressRatio = 0;
@@ -2915,27 +2980,27 @@ function renderCapsule(t, projectActivity) {
       '',
       { eventName: rt.agent && rt.agent.eventName, toolInput: rt.agent && rt.agent.toolInput },
     );
-    semanticActivity = archiveReceipt ? '已归档' : (liveActivity || actionLabel || DISPLAY_COPY[displayState] || '最近没有 Agent 活动');
+    semanticActivity = archiveReceipt ? t('archived') : (liveActivity || actionLabel || DISPLAY_COPY[displayState] || t('status_no_agent_activity'));
     rawActivity = (archiveReceipt && archiveReceipt.rawActivity) || String(rt.activity || '').trim();
     phaseText = t.phase && t.phase.label ? t.phase.label : (rt.phase || DISPLAY_COPY[displayState] || '—');
     previewExcerpt = t.excerpt || t.description || '';
-    if (displayState === 'failed') semanticActivity = liveActivity || '执行失败，查看详情';
-    if (displayState === 'blocked') semanticActivity = liveActivity || '任务已阻塞';
-    if (displayState === 'waiting_permission') semanticActivity = liveActivity || '需要授权';
-    if (displayState === 'waiting_question') semanticActivity = liveActivity || '等待你的回答';
+    if (displayState === 'failed') semanticActivity = liveActivity || t('status_failed');
+    if (displayState === 'blocked') semanticActivity = liveActivity || t('status_blocked');
+    if (displayState === 'waiting_permission') semanticActivity = liveActivity || t('status_waiting_permission');
+    if (displayState === 'waiting_question') semanticActivity = liveActivity || t('status_waiting_question');
     const subs = t.subtasks || [];
     if (subs.length) {
       const doneN = subs.filter(s => s.status === 'completed' || s.status === 'done').length;
       const currentSub = subs.find(s => s.status !== 'completed' && s.status !== 'done');
       const verification = /verify|验证|回归|test|测试|check|gate/i.test(currentSub && currentSub.name || '');
-      const progressLabel = verification ? '验证' : '子任务';
+      const progressLabel = verification ? t('action_check') : t('subtasks_title');
       progressText = `${progressLabel} ${doneN}/${subs.length}`;
-      progressTitle = `${verification ? '回归验证' : '子任务'}进度：${doneN}/${subs.length}`;
+      progressTitle = `${verification ? t('verification_progress') : t('subtasks_progress')}: ${doneN}/${subs.length}`;
       progressRatio = doneN / subs.length;
     } else {
       const lane = Math.min(3, Math.max(0, t.lane ?? 0));
-      progressText = `阶段 ${lane + 1}/4`;
-      progressTitle = `生命周期阶段：${lane + 1}/4`;
+      progressText = `Phase ${lane + 1}/4`;
+      progressTitle = `Lifecycle: ${lane + 1}/4`;
       progressRatio = t.kind === 'done' || displayState === 'completed' ? 1 : (lane + (t.partial || 0)) / 4;
     }
     showBar = true;
@@ -2949,23 +3014,23 @@ function renderCapsule(t, projectActivity) {
       projectActivity.activity,
       projectActivity.toolName,
       null,
-      '项目级会话运行中',
+      t('status_session_running'),
       { eventName: projectActivity.eventName, toolInput: projectActivity.toolInput },
     );
     rawActivity = String(projectActivity.activity || '').trim();
-    phaseText = '项目级会话';
+    phaseText = t('project_session_desc');
     previewExcerpt = semanticActivity;
     progressText = '';
     showBar = false;
     /* 项目级会话：状态行显示「项目会话」，不伪造任务进度 */
-    $('capState').textContent = `项目会话 · ${semanticActivity || DISPLAY_COPY[displayState] || '实时'}`;
+    $('capState').textContent = `${t('session_agent')} · ${semanticActivity || DISPLAY_COPY[displayState] || t('live_label')}`;
   } else {
     displayState = 'idle';
     kind = 'idle';
-    title = '暂无活跃任务';
-    semanticActivity = '开一个 Trellis task 再回来';
+    title = t('empty_idle');
+    semanticActivity = t('empty_idle_desc');
     phaseText = '—';
-    previewExcerpt = '当前没有活跃任务';
+    previewExcerpt = t('empty_idle');
     progressText = '';
     showBar = false;
   }
@@ -2977,10 +3042,10 @@ function renderCapsule(t, projectActivity) {
   if (orb) {
     orb.classList.toggle('check', completed);
     orb.innerHTML = completed ? icon('check', 9) : '';
-    orb.title = DISPLAY_COPY[displayState] || displayState || '空闲';
+    orb.title = DISPLAY_COPY[displayState] || displayState || t('idle');
   }
   if (!(projectActivity && !t)) {
-    $('capState').textContent = semanticActivity || DISPLAY_COPY[displayState] || displayState || '空闲';
+    $('capState').textContent = semanticActivity || DISPLAY_COPY[displayState] || displayState || t('idle');
   }
   $('capTitle').textContent = title;
   $('capTitle').title = title;
@@ -2990,17 +3055,17 @@ function renderCapsule(t, projectActivity) {
   if (toolBadge) {
     toolBadge.textContent = toolName;
     toolBadge.hidden = !toolName;
-    toolBadge.title = toolName ? `当前工具 · ${toolName}` : '';
+    toolBadge.title = toolName ? `Tool · ${toolName}` : '';
   }
   const capsuleActivity = rawActivity || semanticActivity;
   $('capActivity').textContent = capsuleActivity;
   /* 项目标识：始终展示当前所在项目，空闲态显示全部/未接入 */
   const capProject = $('capProject');
   const previewProject = $('capPreviewProject');
-  const projectText = projectName || (state.filter || '全部项目');
+  const projectText = projectName || (state.filter || t('all_projects'));
   if (capProject) {
     capProject.textContent = projectText;
-    capProject.title = `当前项目 · ${projectText}`;
+    capProject.title = `${t('current_project')} · ${projectText}`;
     capProject.hidden = !projectText;
   }
   if (previewProject) previewProject.textContent = projectText;
@@ -3031,12 +3096,12 @@ function renderCapsule(t, projectActivity) {
   const previewTitle = $('capPreviewTitle');
   const previewActivity = $('capPreviewActivity');
   const previewExcerptEl = $('capPreviewExcerpt');
-  if (previewState) previewState.textContent = semanticActivity || DISPLAY_COPY[displayState] || displayState || '空闲';
+  if (previewState) previewState.textContent = semanticActivity || DISPLAY_COPY[displayState] || displayState || t('idle');
   if (previewPhase) previewPhase.textContent = `Phase · ${phaseText}${t && t.workflow ? ` · ${t.workflow}` : ''}`;
   if (previewProgress) {
     previewProgress.textContent = t && progressText
-      ? `开发 ${Math.round(Math.max(0, Math.min(1, t.progress || 0)) * 100)}% · ${progressText}`
-      : (progressText ? `进度 ${progressText}` : '实时');
+      ? `Dev ${Math.round(Math.max(0, Math.min(1, t.progress || 0)) * 100)}% · ${progressText}`
+      : (progressText ? progressText : t('live_label'));
   }
   if (previewTitle) previewTitle.textContent = title;
   if (previewActivity) previewActivity.textContent = capsuleActivity;
@@ -3051,7 +3116,7 @@ function renderCapsule(t, projectActivity) {
   if (unread > 0) {
     badge.hidden = false;
     badge.textContent = unread > 99 ? '99+' : String(unread);
-    badge.title = state.runtimeNotice || '有新的实时活动';
+    badge.title = state.runtimeNotice || t('unread_live_activity');
   } else {
     badge.hidden = true;
     badge.textContent = '0';
@@ -3076,21 +3141,21 @@ function syncCapMenu() {
   if (lock) {
     const manual = state.focusMode === 'manual';
     lock.setAttribute('aria-pressed', String(manual));
-    lock.textContent = manual ? '解除锁定' : '锁定当前任务';
+    lock.textContent = manual ? t('unlock_task') : t('lock_task');
   }
   const auto = $('btnCapAutoFollow');
   if (auto) {
     auto.setAttribute('aria-checked', String(!!state.autoFollowImportant));
     auto.classList.toggle('on', !!state.autoFollowImportant);
     const mark = auto.querySelector('i');
-    if (mark) mark.textContent = state.autoFollowImportant ? '开' : '关';
+    if (mark) mark.textContent = state.autoFollowImportant ? t('on') : t('off');
   }
   const top = $('btnCapTop');
   if (top) {
     top.setAttribute('aria-checked', String(!!state.alwaysOnTop));
     top.classList.toggle('on', !!state.alwaysOnTop);
     const mark = top.querySelector('i');
-    if (mark) mark.textContent = state.alwaysOnTop ? '开' : '关';
+    if (mark) mark.textContent = state.alwaysOnTop ? t('on') : t('off');
   }
 }
 async function toggleCapMenu(force) {
@@ -3189,11 +3254,11 @@ function hookStatus(agent) {
   return state.hookStatuses.find((item) => item && item.agent === agent) || null;
 }
 function hookStatusLabel(agent) {
-  if (state.hookUpdatingAgent === agent) return '处理中…';
-  if (state.hookStatusLoading) return '检查中…';
-  if (state.hookStatusError) return '读取失败';
+  if (state.hookUpdatingAgent === agent) return t('settings_hooks_processing');
+  if (state.hookStatusLoading) return t('settings_hooks_checking');
+  if (state.hookStatusError) return t('status_failed');
   const status = hookStatus(agent);
-  return status ? (status.installed ? '已安装' : '未安装') : '未检测';
+  return status ? (status.installed ? t('settings_hooks_installed') : t('settings_hooks_not_installed')) : t('settings_hooks_checking');
 }
 function hookStatusTone(agent) {
   if (state.hookUpdatingAgent === agent) return 'checking';
@@ -3246,10 +3311,10 @@ async function setWslDistro(distro) {
 }
 function renderWslSection(body) {
   if (!wslObserveSupported()) return;
-  body.appendChild(secTitle('WSL 观察'));
+  body.appendChild(secTitle(t('settings_wsl_title')));
   const guide = document.createElement('div');
   guide.className = 'hook-guide';
-  guide.innerHTML = `<strong>观察 WSL 内的 Trellis 项目</strong><span>在 Windows 上运行 Trellis Card，但 Agent（Claude / Codex 等）运行在 WSL 里。启用后，Agent 的 Hook 会写入 WSL 侧配置，项目以 <code>\\\\wsl$\\&lt;发行版&gt;\\...</code> 路径观察。</span>`;
+  guide.innerHTML = `<strong>${t('settings_wsl_guide_title')}</strong><span>${t('settings_wsl_guide_desc')}</span>`;
   body.appendChild(guide);
   const current = state.wslInfo.current;
   const distros = state.wslInfo.distros || [];
@@ -3260,7 +3325,7 @@ function renderWslSection(body) {
   wrap.className = 'adm-row';
   const label = document.createElement('div');
   label.className = 'adm-info';
-  label.innerHTML = `<div class="adm-name">WSL 发行版</div><div class="adm-path">${current ? esc(current) : '未启用（仅观察 Windows 本机）'}</div>`;
+  label.innerHTML = `<div class="adm-name">${t('settings_wsl_distro')}</div><div class="adm-path">${current ? esc(current) : t('settings_wsl_disabled')}</div>`;
   wrap.appendChild(label);
   const sel = document.createElement('select');
   sel.className = 'mini wsl-select';
@@ -3268,7 +3333,7 @@ function renderWslSection(body) {
   for (const d of options) {
     const opt = document.createElement('option');
     opt.value = d;
-    opt.textContent = d || '— 停用 —';
+    opt.textContent = d || ('— ' + t('settings_wsl_disabled') + ' —');
     if ((!current && !d) || d === current) opt.selected = true;
     sel.appendChild(opt);
   }
@@ -3276,15 +3341,15 @@ function renderWslSection(body) {
   wrap.appendChild(sel);
   body.appendChild(wrap);
   if (distros.length === 0 && !current) {
-    body.appendChild(note('未检测到 WSL 发行版（需在 Windows 上运行，且已安装 WSL）。'));
+    body.appendChild(note(t('settings_wsl_none')));
   }
 }
 function renderHookSection(body) {
-  body.appendChild(secTitle('Agent 接入'));
+  body.appendChild(secTitle(t('settings_hooks_title')));
 
   const guide = document.createElement('div');
   guide.className = 'hook-guide';
-  guide.innerHTML = `<strong>让 Trellis Card 自动收到活动</strong><span>本机全局接入，一次安装即可观察多个 Trellis 项目；普通项目不会进入卡片。</span><span>选择 Agent，点击安装，然后重启对应 Agent。移除时只会删除 Trellis Card 自己的 Hook。</span>`;
+  guide.innerHTML = `<strong>${t('settings_hooks_guide_title')}</strong><span>${t('settings_hooks_guide_desc1')}</span><span>${t('settings_hooks_guide_desc2')}</span>`;
   body.appendChild(guide);
 
   const actions = document.createElement('div');
@@ -3292,7 +3357,7 @@ function renderHookSection(body) {
   const refreshButton = document.createElement('button');
   refreshButton.type = 'button';
   refreshButton.className = 'mini hook-refresh';
-  refreshButton.innerHTML = `${icon('refresh', 12)}<span>重新检测</span>`;
+  refreshButton.innerHTML = `${icon('refresh', 12)}<span>${t('settings_hooks_rescan')}</span>`;
   refreshButton.disabled = state.hookStatusLoading || !!state.hookUpdatingAgent;
   refreshButton.onclick = () => refreshHookStatuses(true);
   actions.appendChild(refreshButton);
@@ -3307,31 +3372,32 @@ function renderHookSection(body) {
     const stateLabel = hookStatusLabel(agent.id);
     const statusIcon = tone === 'installed' ? 'check' : tone === 'error' ? 'circle-x' : tone === 'checking' ? 'refresh' : 'circle-alert';
     const configPath = (status && status.configPath) || agent.configPath;
+    const desc = t('hook_desc_' + agent.id) || agent.description;
     row.innerHTML = `
       <div class="adm-info">
         <div class="adm-name">${esc(agent.label)}<span class="hook-state hook-state-${tone}">${icon(statusIcon, 11)}<span>${esc(stateLabel)}</span></span></div>
-        <div class="hook-desc">${esc(agent.description)}</div>
-        <div class="adm-path">配置：${esc(configPath)}</div>
+        <div class="hook-desc">${esc(desc)}</div>
+        <div class="adm-path">Config: ${esc(configPath)}</div>
       </div>`;
     const button = document.createElement('button');
     button.type = 'button';
     button.className = status && status.installed ? 'mini danger-mini hook-action' : 'mini hook-action';
     button.disabled = !status || !!state.hookStatusError || !!state.hookStatusLoading || !!state.hookUpdatingAgent;
     if (state.hookUpdatingAgent === agent.id) {
-      button.innerHTML = `${icon('refresh', 11)}<span>处理中…</span>`;
+      button.innerHTML = `${icon('refresh', 11)}<span>${t('settings_hooks_processing')}</span>`;
     } else {
       button.innerHTML = status && status.installed
-        ? `${icon('x', 11)}<span>移除</span>`
-        : `${icon('check', 11)}<span>安装</span>`;
+        ? `${icon('x', 11)}<span>${t('settings_hooks_remove')}</span>`
+        : `${icon('check', 11)}<span>${t('settings_hooks_install')}</span>`;
     }
-    button.setAttribute('aria-label', `${agent.label}${status && status.installed ? '移除' : '安装'} Hook`);
+    button.setAttribute('aria-label', `${agent.label} ${status && status.installed ? t('settings_hooks_remove') : t('settings_hooks_install')}`);
     button.onclick = () => toggleHook(agent.id);
     row.appendChild(button);
     body.appendChild(row);
   }
 
   if (state.hookStatusError) {
-    const error = note(`读取 Hook 配置失败：${state.hookStatusError}`);
+    const error = note(t('settings_hooks_read_failed', { error: state.hookStatusError }));
     error.classList.add('hook-error');
     body.appendChild(error);
   }
@@ -3367,16 +3433,40 @@ async function toggleHook(agent) {
     if (!next || next.agent !== agent) throw new Error('返回的 Hook 状态格式无效');
     state.hookStatuses = state.hookStatuses.map((item) => item.agent === agent ? next : item);
     /* DSH 的 bridge 是 cordis 插件，需重启 DeepSeek Harness 服务本身。 */
-    const restartHint = agent === 'dsh' ? '请重启 DeepSeek Harness' : `请重启 ${label}`;
-    toast(enabled ? `${label} Hook 已安装，${restartHint}` : `${label} Hook 已移除`);
+    const restartHint = agent === 'dsh'
+      ? (state.language === 'zh' ? '请重启 DeepSeek Harness' : 'Please restart DeepSeek Harness')
+      : (state.language === 'zh' ? `请重启 ${label}` : `Please restart ${label}`);
+    toast(enabled
+      ? (state.language === 'zh' ? `${label} Hook 已安装，${restartHint}` : `${label} Hook installed. ${restartHint}`)
+      : (state.language === 'zh' ? `${label} Hook 已移除` : `${label} Hook removed`));
   } catch (e) {
     console.error('[invoke:configure_hook]', e);
-    toast(`${label} Hook 操作失败：${errMsg(e)}`);
+    toast(state.language === 'zh' ? `${label} Hook 操作失败：${errMsg(e)}` : `${label} Hook operation failed: ${errMsg(e)}`);
   } finally {
     state.hookUpdatingAgent = null;
     render();
   }
 }
+function renderLanguageSection(body) {
+  body.appendChild(secTitle(t('settings_language_title')));
+  const row = document.createElement('div');
+  row.className = 'adm-row';
+  row.innerHTML = `
+    <div class="adm-info">
+      <div class="adm-name">${t('language')}</div>
+      <div class="adm-path">${t('settings_language_desc')}</div>
+    </div>`;
+  const sel = document.createElement('select');
+  sel.className = 'mini';
+  sel.innerHTML = `
+    <option value="en"${state.language === 'en' ? ' selected' : ''}>English</option>
+    <option value="zh"${state.language === 'zh' ? ' selected' : ''}>简体中文</option>
+  `;
+  sel.onchange = () => setLanguage(sel.value);
+  row.appendChild(sel);
+  body.appendChild(row);
+}
+
 function renderAdmin() {
   const panel = $('admin');
   document.body.classList.toggle('admin-open', !!state.adminOpen);
@@ -3389,12 +3479,13 @@ function renderAdmin() {
   const body = $('adminBody');
   body.innerHTML = '';
 
+  renderLanguageSection(body);
   renderWslSection(body);
   renderHookSection(body);
 
   /* Configure：根目录可写在前，已发现项目只读在后 */
-  body.appendChild(secTitle('根目录'));
-  if (!state.roots.length) body.appendChild(note('还没有根目录'));
+  body.appendChild(secTitle(t('settings_roots_title')));
+  if (!state.roots.length) body.appendChild(note(t('settings_roots_empty')));
   for (const r of state.roots) {
     const row = document.createElement('div');
     row.className = 'adm-row';
@@ -3402,7 +3493,7 @@ function renderAdmin() {
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'mini danger-mini';
-    btn.textContent = '移除';
+    btn.textContent = t('settings_roots_remove');
     btn.onclick = () => removeRoot(r);
     row.appendChild(btn);
     body.appendChild(row);
@@ -3410,18 +3501,18 @@ function renderAdmin() {
   const add = document.createElement('button');
   add.type = 'button';
   add.className = 'mini block';
-  add.textContent = '＋ 添加文件夹';
+  add.textContent = t('settings_roots_add');
   add.onclick = () => addRootFlow(false);
   body.appendChild(add);
 
-  body.appendChild(secTitle('已发现项目'));
-  if (!state.projects.length) body.appendChild(note('没有发现 Trellis 项目'));
+  body.appendChild(secTitle(t('settings_projects_title')));
+  if (!state.projects.length) body.appendChild(note(t('settings_projects_empty')));
   for (const p of state.projects) {
     const row = document.createElement('div');
     row.className = 'adm-row';
     row.innerHTML = `
       <div class="adm-info">
-        <div class="adm-name">${esc(p.name)}<span class="adm-count">${p.taskCount ?? 0} 任务</span></div>
+        <div class="adm-name">${esc(p.name)}<span class="adm-count">${t('tasks_count', { n: p.taskCount ?? 0 })}</span></div>
         <div class="adm-path">${esc(projectNameForPath(p.path) || p.path)}</div>
       </div>`;
     body.appendChild(row);
@@ -3444,7 +3535,7 @@ async function removeRoot(path) {
   try {
     const r = await call('remove_root', { path });
     state.roots = (r && r.roots) || [];
-    toast('已移除根目录');
+    toast(state.language === 'zh' ? '已移除根目录' : 'Root directory removed');
     await refresh(true);
     render();
   } catch (e) {
@@ -3463,7 +3554,7 @@ async function addRootFlow(fromSetup) {
     if (!path) return;   /* 用户取消 */
     const r = await call('add_root', { path });
     state.roots = (r && r.roots) || [];
-    toast('已添加文件夹');
+    toast(state.language === 'zh' ? '已添加文件夹' : 'Folder added');
     if (fromSetup) {
       await enterMain({ openHookSetup: true });
     } else {
@@ -3491,7 +3582,9 @@ async function toggleTop() {
   try {
     const r = await call('set_always_on_top', { flag });
     state.alwaysOnTop = !!r;
-    toast(state.alwaysOnTop ? '已置顶' : '已取消置顶');
+    toast(state.alwaysOnTop
+      ? (state.language === 'zh' ? '已置顶' : 'Pinned on top')
+      : (state.language === 'zh' ? '已取消置顶' : 'Unpinned'));
     render();
   } catch (e) {
     report('set_always_on_top', e);
@@ -3617,6 +3710,7 @@ function renderSetup() {
   state.view = 'setup';
   $('setup').hidden = false;
   $('mainView').hidden = true;
+  if (typeof TrellisI18n !== 'undefined') TrellisI18n.applyToDom();
   for (const id of ['btnScanExisting', 'btnStartEmpty']) {
     const button = $(id);
     if (button) button.disabled = state.setupBusy;
@@ -3773,7 +3867,7 @@ async function onTasksChanged({ urgent = false, project = null } = {}) {
       focusMutated = true;
     }
     state.subOpen = null;
-    toast(`新任务：${t.title || t.id}`);
+    toast(state.language === 'zh' ? `新任务：${t.title || t.id}` : `New task: ${t.title || t.id}`);
     /* 保持胶囊态：任务变化时不弹回卡片，胶囊收缩态实时更新工具/活动 */
   }
   /* 事件变更可能含外部 task.py archive（不经前端 archive_task）：归档缓存需失效重拉，
@@ -3893,14 +3987,11 @@ function renderThemePicker() {
   const count = $('themeCount');
   if (count) count.textContent = `${THEME_DEFS.length} styles`;
   const root = $('themeChoices');
-  if (!root || root.childElementCount) {
-    syncThemeChrome();
-    return;
-  }
+  if (!root) return;
   root.innerHTML = THEME_DEFS.map((theme) => `
     <button type="button" class="theme-choice" data-theme-choice="${theme.id}" aria-pressed="false" title="${esc(theme.family)}">
       <span class="theme-swatch" style="--swatch-a:${theme.swatch[0]};--swatch-b:${theme.swatch[1]}" aria-hidden="true"></span>
-      <span class="theme-choice-label">${esc(theme.label)}</span>
+      <span class="theme-choice-label">${esc(themeLabel(theme.id))}</span>
       <span class="theme-choice-meta">${esc(theme.family)}</span>
     </button>`).join('');
   root.querySelectorAll('[data-theme-choice]').forEach((choice) => {
@@ -3909,7 +4000,7 @@ function renderThemePicker() {
       event.stopPropagation();
       applyTheme(choice.dataset.themeChoice);
       toggleThemePop(false);
-      toast(`已切换到${themeLabel(state.theme)}`);
+      toast(state.language === 'zh' ? `已切换到${themeLabel(state.theme)}` : `Switched to ${themeLabel(state.theme)}`);
     };
   });
   syncThemeChrome();
@@ -3950,14 +4041,18 @@ function syncMenuChrome() {
     auto.classList.toggle('on', !!state.autoFollowImportant);
     auto.setAttribute('aria-checked', String(!!state.autoFollowImportant));
     const mark = auto.querySelector('i');
-    if (mark) mark.textContent = state.autoFollowImportant ? '开' : '关';
+    if (mark) mark.textContent = state.autoFollowImportant ? t('on') : t('off');
   }
   const top = $('btnTop');
   if (top) {
     top.classList.toggle('on', !!state.alwaysOnTop);
     top.setAttribute('aria-checked', String(!!state.alwaysOnTop));
     const mark = top.querySelector('i');
-    if (mark) mark.textContent = state.alwaysOnTop ? '开' : '关';
+    if (mark) mark.textContent = state.alwaysOnTop ? t('on') : t('off');
+  }
+  const menuLangName = $('menuLangName');
+  if (menuLangName) {
+    menuLangName.textContent = state.language === 'zh' ? '简体中文' : 'English';
   }
   const adm = $('btnAdmin');
   if (adm) adm.setAttribute('aria-expanded', String(!!state.adminOpen));
@@ -4019,6 +4114,15 @@ function bindUI() {
   renderThemePicker();
   $('btnScanExisting').onclick = () => addRootFlow(true);
   $('btnStartEmpty').onclick = () => startWithoutProject();
+  if ($('btnSetupLang')) {
+    $('btnSetupLang').onclick = () => setLanguage(state.language === 'zh' ? 'en' : 'zh');
+  }
+  if ($('btnMenuLang')) {
+    $('btnMenuLang').onclick = () => {
+      setLanguage(state.language === 'zh' ? 'en' : 'zh');
+      syncMenuChrome();
+    };
+  }
   $('btnRefresh').onclick = () => { toggleMenu(false); manualRefresh(); };
   $('btnTree').onclick = () => { if (state.menuOpen) toggleMenu(false); toggleTree(); };
   $('btnRelations').onclick = () => { if (state.menuOpen) toggleMenu(false); toggleRelations(); };

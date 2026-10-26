@@ -1465,8 +1465,8 @@ pub fn run() {
             // 托盘：显示 / 退出
             use tauri::menu::{MenuBuilder, MenuItemBuilder};
             use tauri::tray::TrayIconBuilder;
-            let show = MenuItemBuilder::with_id("show", "显示 Trellis Card").build(app)?;
-            let quit = MenuItemBuilder::with_id("quit", "退出").build(app)?;
+            let show = MenuItemBuilder::with_id("show", "Show Trellis Card").build(app)?;
+            let quit = MenuItemBuilder::with_id("quit", "Quit").build(app)?;
             let menu = MenuBuilder::new(app).items(&[&show, &quit]).build()?;
             let mut tray = TrayIconBuilder::with_id("main-tray")
                 .menu(&menu)
