@@ -6,11 +6,12 @@
   "description": "Read-only desktop observer for Trellis tasks and Agent activity",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
+    "build:frontend": "tsc && vite build",
+    "build": "tauri build",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build",
-    "test": "node --test test/smoke.test.js",
+    "test": "npm run build:frontend && node --test test/smoke.test.js",
     "check": "tsc --noEmit"
   },
   "devDependencies": {
