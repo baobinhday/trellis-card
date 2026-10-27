@@ -1,178 +1,159 @@
-# Trellis Card
+# Trellis Kanban Board
 
-> 常驻桌面的 Trellis 任务与 Agent 活动观察者。
+> A lightweight, cross-platform desktop Kanban board and visual task explorer for [Trellis](https://github.com/mindfold-ai/trellis) projects.
 
-Trellis Card 是一款 macOS / Windows / Linux 桌面端小工具，以「卡片」和「胶囊」两种形态实时展示 Trellis 项目中的任务进度与 Agent 活动。它不修改任务，只负责让你一眼看清当前在发生什么。
+Trellis Kanban Board provides an intuitive, high-level overview of spec-driven AI development tasks. By scanning `.trellis/tasks` across one or multiple local repositories, it visualizes active and archived tasks across standard workflow stages without altering or interfering with your CLI workflow.
 
-## 支持的系统
+---
 
-| 系统 | 安装包 |
-|---|---|
-| **macOS**（Apple Silicon + Intel） | `.dmg` |
-| **Windows**（x64） | `.exe` / `.msi` |
-| **Linux / Ubuntu**（x64） | `.deb` / `.AppImage` |
+## Supported Platforms
 
-## 支持的 Agent
-
-| Agent | 接入方式 | 采集内容 |
+| Platform | Packages | Architecture |
 |---|---|---|
-| **Codex** | 应用侧写入 `~/.codex/hooks.json` | 会话开始、工具活动、任务绑定 |
-| **Claude Code** | 应用侧写入 `~/.claude/settings.json` | 会话开始、工具活动、任务绑定 |
-| **Cursor** | 应用侧写入 `~/.cursor/hooks.json` | 会话开始、工具活动（纯观察者） |
-| **Pi** | 用户级全局扩展 `~/.pi/agent/extensions/` | 会话开始、用户 prompt、工具活动（纯观察者） |
-| **OpenCode** | 用户级全局插件 `~/.config/opencode/plugins/` | 用户消息、工具活动（纯观察者） |
-| **DeepSeek Harness** | dsh 插件 `~/.config/trellis-card/agents/dsh-trellis-bridge/` | 会话开始、用户 prompt、工具活动（纯观察者） |
+| **macOS** | `.dmg` | Apple Silicon (M-series) + Intel (x64) |
+| **Windows** | `.exe` (NSIS) / `.msi` | x64 |
+| **Linux / Ubuntu** | `.deb` / `.rpm` / `.AppImage` | x64 |
 
-![Agent 接入设置](./docs/screenshots/agent-settings.png)
+---
 
-## 核心特性
+## Visual Workflow & Kanban Board
 
-### 1. 卡片 grab header
+```
++----------------------------------------------------------------------------------------------------+
+|  [Sidebar]       |  [Header] Project: my-project  [Search...] [Filter: Priority v] [Archive (3)]    |
++------------------+---------------------------------------------------------------------------------+
+| + Import Project |                                                                                 |
+|                  |  +----------------+  +----------------+  +----------------+  +----------------+ |
+| * trellis-card   |  |   PLANNING     |  |  IN PROGRESS   |  | REVIEW/BLOCKED |  | DONE / ARCHIVE | |
+|   (5 tasks)      |  +----------------+  +----------------+  +----------------+  +----------------+ |
+|                  |  | [P2] 00-boot   |  | [P1] 10-27-kan |  | [P0] 10-25-api |  | [P2] 10-26-i18 | |
+| * backend-api    |  | PRD drafting   |  | Implementing   |  | Blocked by auth|  | Finished       | |
+|   (12 tasks)     |  |                |  | Subtasks: 2/3  |  |                |  |                | |
+|                  |  | [P3] docs-rev  |  |                |  |                |  | (Archived)     | |
+| [Theme: Dark/Lt] |  +----------------+  +----------------+  +----------------+  +----------------+ |
++----------------------------------------------------------------------------------------------------+
+                                    | Click Task Card
+                                    v
+            +---------------------------------------------------------------+
+            |  Task Detail Drawer (Slide-Over)                             |
+            |  -----------------------------------------------------------  |
+            |  Title: Kanban Board for Trellis Tasks                        |
+            |  Directory: 10-27-kanban-trellis-board                        |
+            |  Status: in_progress | Priority: P1 | Subtasks: 2/3           |
+            |  [Open Folder] [Open in VS Code / Cursor]                     |
+            |  -----------------------------------------------------------  |
+            |  Tabs: [PRD] [DESIGN] [IMPLEMENT] [RESEARCH]                  |
+            |                                                               |
+            |  # PRD: Kanban Board for Trellis Tasks                        |
+            |  Rendered GitHub-Flavored Markdown preview with checklists... |
+            +---------------------------------------------------------------+
+```
 
-卡片顶部是统一的 grab header：**状态蝴蝶灯**（随运行状态变色 / 呼吸）+ **项目名** + **任务进度刻度条**。当前任务的状态与进度一眼可见，header 整体可拖动。
+---
 
-![卡片 grab header](./docs/screenshots/grab-header-card.png)
+## Key Features
 
-### 2. 灵动岛胶囊 · 紧凑 / 展开两态
+### 1. Multi-Project Management
+- **Import Folders**: Select any directory containing a `.trellis/` folder via native file dialog or manual path input.
+- **Project Switcher**: Keep multiple repositories pinned in the sidebar with real-time task counts and instant project switching.
 
-胶囊是透明窗口中的灵动岛表面，两种状态切换自如：
+### 2. Four-Column Kanban Layout
+Tasks automatically map to the four core Trellis lifecycle phases:
+- 📋 **Planning / Backlog** (`status: planning`): Tasks in brainstorming, requirement discovery, or PRD refinement.
+- 🚀 **In Progress** (`status: in_progress`): Tasks currently being executed by AI agents or developers.
+- 🔍 **Verification / Blocked** (`status: blocked` / `check`): Tasks requiring human review, authorization, or blocked on dependencies.
+- ✅ **Done / Archived** (`status: completed` / under `archive/`): Finished deliverables and historical tasks.
 
-- **紧凑态（40px）** — 只显示状态灯、任务名与当前工具名 badge，极致省空间，浮在工作区一角不打断当前应用。
-- **展开态（136px）** — 鼠标扫过即展开，显示状态、活动描述（markdown 渲染）、进度；移出自动收起。
+### 3. Task Cards with Rich Metadata
+- **Priority Indicators**: Visual color-coded tags (`P0` Blocker, `P1` High, `P2` Medium, `P3` Low).
+- **Subtask Progress**: Automatic tracking and progress bar for checklists defined in `task.json`.
+- **Spec Artifact Badges**: Instant visibility into which planning artifacts exist (`PRD`, `DSG`, `IMP`, and spec rules count).
 
-胶囊菜单为 2×3 网格（液态玻璃材质），支持**吸附顶部**：让胶囊吸附到屏幕顶部中央。
+### 4. Interactive Slide-Over Task Detail
+- Click any task card to reveal the complete task metadata without leaving your workspace.
+- Built-in Markdown renderer (GFM) displaying `prd.md`, `design.md`, `implement.md`, and research notes.
+- Quick action buttons to launch the task directory directly in **Cursor**, **VS Code**, or your system file manager (**Finder** / **File Explorer** / **Nautilus**).
 
-![灵动岛三形态：压缩 / 展开 / 设置菜单](./docs/screenshots/capsule-modes-combo.png)
+### 5. Instant Filtering & Search
+- Search in real-time across task titles, slugs, and descriptions.
+- Filter by priority tier (`All`, `P0`, `P1`, `P2`, `P3`).
+- Toggle visibility for archived historical tasks on demand.
 
-### 3. 任务关联视图
+### 6. Dark & Light Theme Support
+- Clean UI with seamless theme switching (persisted locally across sessions).
 
-顶栏点击「关联」，窗口临时放大为关联画布，三种视图透视全项目：
+---
 
-- **任务看板** — 所有任务按「活跃任务 / 批次（父子）组 / 独立任务」分组，独立任务按最近活动时间分桶；每张任务卡显示状态、进度、优先级、待办、活跃会话与编辑中文件。
-- **关联网络** — 分析任务间的「同族」关联：共享同一决策文档、共享源码文件、共享规范的任务自动聚为同族，发现跨任务的隐藏协作。
-- **规范地图** — 项目规范按类别分组展示，标注已沉淀 / 空模板、行数与引用任务数。
+## Getting Started
 
-点任意任务卡可直接跳转主卡片聚焦该任务。
+### Installation
 
-![关联视图 · 任务看板](./docs/screenshots/relations-board.png)
+Download pre-built binaries from the [Releases](../../releases) section:
 
-![关联视图 · 关联网络](./docs/screenshots/relations-links.png)
+- **macOS**: Download `.dmg`, open and drag `Trellis Card` to Applications.
+- **Windows**: Download and run `.exe` or install via `.msi`.
+- **Linux (Ubuntu / Debian / Fedora)**:
+  - Debian/Ubuntu: `sudo dpkg -i Trellis-Card_*.deb`
+  - AppImage: `chmod +x Trellis-Card_*.AppImage && ./Trellis-Card_*.AppImage`
+  - *Prerequisites on Linux*:
+    ```bash
+    sudo apt install libwebkit2gtk-4.1-0 libayatana-appindicator3-1 librsvg2-common
+    ```
 
-![关联视图 · 规范地图](./docs/screenshots/relations-specs.png)
+---
 
-### 4. 归档任务浏览
+## Development
 
-任务树新增「显示已归档」开关，勾选后懒加载并展示已归档任务（按月分层），历史工作可随时回溯；归档任务灰显并标注「已归档」，不覆盖活跃任务状态。
+### Prerequisites
+- Node.js >= 20
+- Rust & Cargo (for Tauri backend compilation)
 
-![归档任务浏览](./docs/screenshots/archived-tree.png)
-
-### 5. 生命周期状态感知
-
-Trellis Card 把任务的生命周期压缩成四种可感知的状态：
-
-- **规划中** — 需求探索或 PRD 已就绪
-- **运行中** — Agent 正在执行 / 验证
-- **等待授权 / 被阻塞** — Agent 暂停，等待用户授权或人工确认
-- **已完成** — 任务结束，等待归档
-
-![生命周期状态](./docs/screenshots/02-lifecycle-collage.png)
-
-### 6. 翻面查看任务详情
-
-点击「详情」翻到卡片背面，直接阅读 PRD、DESIGN、IMPLEMENT、验收报告与 research 文档，支持 GFM 表格、任务清单、折叠分区，无需离开桌面。
-
-![翻面文档详情](./docs/screenshots/04-card-detail.png)
-
-### 7. 任务树、项目筛选与多项目观察
-
-任务树列出所有任务层级，支持按项目筛选；扫描根目录或让 Hook 动态发现项目后，一个窗口就能同时观察多个 Trellis 仓库。
-
-![任务树与项目筛选](./docs/screenshots/05-task-list.png)
-
-### 8. 20 款主题
-
-内置 specimen、synthwave、blueprint、glassmorphism、neo-brutalism、bento 等 20 种视觉主题，随时切换。
-
-![部分主题](./docs/screenshots/06-themes-collage.png)
-
-### 9. 托盘常驻
-
-关闭窗口即隐藏到托盘，不会误退；随时从托盘唤回。
-
-### 10. 窗口可拉伸
-
-卡片窗口默认贴合内容高度（内容自适应），也可拖拽边缘 / 角自由调整大小，放大后内容自动铺满利用空间；调整过的尺寸会记住，下次启动恢复。
-
-### 11. 新版本提示
-
-启动时自动检查 GitHub 最新 Release，有新版时在窗口底部弹出提示条（含版本号与更新说明），一键跳转下载，也可忽略该版本。
-
-## 快速开始
-
-### 直接下载使用
-
-在 [Releases](../../releases) 页面按平台下载对应安装包：
-
-- **macOS**：下载 `.dmg`，拖拽安装后即可运行。
-- **Windows**：下载 `.exe` 安装程序或 `.msi`，双击安装。
-- **Linux / Ubuntu**：下载 `.deb`（`sudo dpkg -i Trellis-Card_*.deb`）或 `.AppImage`（`chmod +x` 后直接运行）。首次运行前需安装系统依赖：
-
-  ```bash
-  sudo apt install libwebkit2gtk-4.1-0 libayatana-appindicator3-1 librsvg2-common
-  ```
-
-### 开发运行
+### Commands
 
 ```bash
+# Install dependencies
 npm install
-npm run dev        # tauri dev
+
+# Run web frontend in browser (Vite preview with mock data)
+npm run dev
+
+# Run desktop application with Tauri
+npm run tauri:dev
+
+# Run tests and typecheck
+npm test
+npm run check
+
+# Build desktop release bundles (installer packages)
+npm run build
 ```
 
-### 构建
+---
 
-```bash
-npm run build      # tauri build
+## Architecture & Tech Stack
+
+```
+trellis-card/
+├── src-tauri/                # Desktop backend (Tauri v2 in Rust)
+│   ├── src/scan.rs           # Trellis tasks and directory scanner
+│   ├── src/lib.rs            # IPC command handlers (pick_folder, list_tasks, get_task)
+│   └── tauri.conf.json       # Tauri window configuration & build hooks
+├── src/                      # Frontend (React 19 + TypeScript + Vite + Tailwind CSS)
+│   ├── components/           # Sidebar, Header, KanbanBoard, TaskCard, TaskDetailModal
+│   ├── services/tauri.ts     # Type-safe IPC client with browser fallback mock
+│   ├── types.ts              # Data contracts for Trellis tasks and projects
+│   └── App.tsx               # Main layout and project coordinator
+└── .trellis/                 # Trellis spec and task management
 ```
 
-### 接入 Trellis 项目
+- **Desktop Framework**: [Tauri v2](https://tauri.app/) (Rust)
+- **Frontend**: [React 19](https://react.dev/), [TypeScript](https://www.typescriptlang.org/), [Vite](https://vitejs.dev/)
+- **Styling**: [Tailwind CSS](https://tailwindcss.com/)
+- **Icons**: [Lucide React](https://lucide.dev/)
+- **Markdown**: [React Markdown](https://github.com/remarkjs/react-markdown) + [Remark GFM](https://github.com/remarkjs/remark-gfm)
 
-首次启动有两种方式：
+---
 
-1. **扫描已有项目**：选择一个根目录，自动发现其下的 Trellis 项目。
-2. **从零开始**：先进入空卡片；在「设置」中为 Agent 安装 Hook 后，Agent 运行 Trellis 项目时会自动导入。
+## License
 
-![首次启动选择接入方式](./docs/screenshots/07-setup.png)
-
-Hook 只需安装一次，即可观察多个项目。若已进入主界面，可按以下路径配置：
-
-1. 点击卡片右上角的三横线，打开「观察菜单」。
-2. 在「配置」区域点击「设置」。
-3. 在「Agent 接入」中选择 `Codex`、`Claude Code`、`Cursor`、`Pi`、`OpenCode` 或 `DeepSeek Harness`，点击「安装」。
-4. 重启对应 Agent；此后它在 Trellis 项目中的活动会自动出现在卡片中。
-
-「设置」会显示 Hook 是否已安装；需要停止接入时，点击同一位置的「移除」即可。应用只管理自身写入的 Hook，不会改动其他配置。
-
-> 说明：Cursor / Pi / OpenCode / DeepSeek Harness 的 hook 是纯观察者，只采集会话与工具活动，不参与权限决策，也不会阻断或修改命令。Pi 通过用户级全局扩展（`~/.pi/agent/extensions/`）、OpenCode 通过用户级全局插件（`~/.config/opencode/plugins/`）、DeepSeek Harness 通过 dsh 插件（`~/.config/trellis-card/agents/dsh-trellis-bridge/`）接入，均无需在项目内放置文件。DeepSeek Harness 的 bridge 需要先安装 dsh（`npm i -g @deepseek-ai/dsh`），安装后重启 DeepSeek Harness 生效。
-
-> **WSL 观察模式**：若你在 Windows 上运行 Trellis Card、但 Agent 在 WSL 内跑 Trellis 项目，可在「设置 → WSL 观察」中选择 WSL 发行版。启用后 Hook 写入 WSL 侧配置（`\\wsl$\<发行版>\...`），项目以 UNC 路径观察。详见 [docs/wsl-support.md](./docs/wsl-support.md)。
-
-## 操作速查
-
-| 快捷键 | 动作 |
-|---|---|
-| `L` | 打开/关闭任务列表 |
-| `C` | 切换卡片 / 胶囊模式 |
-| `R` | 刷新 |
-| `Esc` | 关闭菜单/弹层 |
-| `↑/↓` | 在列表中移动焦点 |
-
-## 技术栈
-
-- **桌面端**：Tauri 2 + Rust
-- **前端**：原生 JavaScript / CSS（无框架），GSAP 动画，Tailwind（布局补充层）
-- **通信**：Windows Named Pipe / Unix socket + inbox 队列接收 Agent Hook 事件
-- **文件监听**：notify 实时感知 `.trellis/tasks` 变化
-
-## 友链
-
-- LinuxDo — https://linux.do
+MIT License.
