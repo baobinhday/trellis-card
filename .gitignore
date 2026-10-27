@@ -1,5 +1,5 @@
 node_modules/
-test/
+dist/
 src-tauri/target/
 target/
 src-tauri/gen/
