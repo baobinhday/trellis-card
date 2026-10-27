@@ -70,7 +70,7 @@ fn sync_watches(watcher: &mut RecommendedWatcher, watched: &mut Vec<PathBuf>) ->
                     watched.push(dir);
                     changed = true;
                 }
-                Err(e) => eprintln!("[watch] 监听失败 {}: {}", dir.display(), e),
+                Err(e) => eprintln!("[watch] Failed to watch {}: {}", dir.display(), e),
             }
         }
     }
@@ -88,13 +88,13 @@ pub fn spawn_watcher(app: tauri::AppHandle) {
         ) {
             Ok(w) => w,
             Err(e) => {
-                eprintln!("[watch] 创建 watcher 失败: {}", e);
+                eprintln!("[watch] Failed to create watcher: {}", e);
                 return;
             }
         };
         let mut watched: Vec<PathBuf> = Vec::new();
         sync_watches(&mut watcher, &mut watched);
-        println!("[watch] 已启动，监听 {} 个 .trellis 目录", watched.len());
+        println!("[watch] Started, watching {} .trellis directories", watched.len());
 
         let mut dirty_at: Option<Instant> = None;
         let mut last_tick = Instant::now();
@@ -105,7 +105,7 @@ pub fn spawn_watcher(app: tauri::AppHandle) {
                         dirty_at = Some(Instant::now());
                     }
                 }
-                Ok(Err(e)) => eprintln!("[watch] 事件错误: {}", e),
+                Ok(Err(e)) => eprintln!("[watch] Event error: {}", e),
                 Err(mpsc::RecvTimeoutError::Timeout) => {}
                 Err(mpsc::RecvTimeoutError::Disconnected) => break,
             }
@@ -122,7 +122,7 @@ pub fn spawn_watcher(app: tauri::AppHandle) {
                 last_tick = Instant::now();
                 if sync_watches(&mut watcher, &mut watched) {
                     println!(
-                        "[watch] 项目集合变化（{} 个），emit tasks-changed",
+                        "[watch] Project set changed ({} projects), emitting tasks-changed",
                         watched.len()
                     );
                     let _ = app.emit(EVENT, ());

@@ -249,23 +249,23 @@ fn infer_phase(status: &str, a: &Artifacts) -> Phase {
         warn,
     };
     match status {
-        "completed" | "done" => p("done", "已完结 · 待归档", false),
-        "review" => p("review", "待评审", false),
-        "blocked" => p("halt", "卡住了", true),
+        "completed" | "done" => p("done", "Completed · Ready to archive", false),
+        "review" => p("review", "In Review", false),
+        "blocked" => p("halt", "Blocked", true),
         "in_progress" => {
             if a.report_count > 0 {
-                p("verify", "动手 · 验证阶段", false) // Phase 2.2/3.1
+                p("verify", "In Progress · Verifying", false) // Phase 2.2/3.1
             } else {
-                p("implement", "动手 · 实现中", false) // Phase 2.1
+                p("implement", "In Progress · Implementing", false) // Phase 2.1
             }
         }
         "planning" => {
             if a.impl_entries > 0 {
-                p("ready", "规划 1.3 就绪 · 可启动", false) // 规范注入已配
+                p("ready", "Planning · Ready to start", false) // 规范注入已配
             } else if a.prd {
-                p("need-context", "规划中 · 规范注入未配", true) // ★ 最容易漏的一步
+                p("need-context", "Planning · Needs spec context", true) // ★ 最容易漏的一步
             } else {
-                p("explore", "规划 · 需求探索中", false) // Phase 1.0-1.1
+                p("explore", "Planning · Exploring", false) // Phase 1.0-1.1
             }
         }
         _ => p("unknown", status, false),
@@ -727,7 +727,7 @@ fn scan_tasks_inner(project_dir: &Path, include_archived: bool) -> (Vec<Task>, V
     let entries = match fs::read_dir(&tasks_dir) {
         Ok(e) => e,
         Err(err) => {
-            errors.push(format!("无法读取 {}: {}", tasks_dir.display(), err));
+            errors.push(format!("Cannot read {}: {}", tasks_dir.display(), err));
             return (tasks, errors);
         }
     };
@@ -792,7 +792,7 @@ fn scan_archived_dir(
     let entries = match fs::read_dir(archive_dir) {
         Ok(e) => e,
         Err(err) => {
-            errors.push(format!("无法读取 {}: {}", archive_dir.display(), err));
+            errors.push(format!("Cannot read {}: {}", archive_dir.display(), err));
             return;
         }
     };
@@ -861,7 +861,7 @@ fn scan_task_dir(
     {
         Some(r) => r,
         None => {
-            errors.push(format!("跳过任务 {}", dir_name));
+            errors.push(format!("Skipping invalid task {}", dir_name));
             return;
         }
     };

@@ -197,19 +197,19 @@ fn dsh_bin() -> Option<PathBuf> {
 /** Run `dsh plugin --profile <p> <args...>` and return stdout/stderr on failure. */
 fn dsh_plugin(args: &[&str]) -> Result<String, String> {
     let bin = dsh_bin().ok_or_else(|| {
-        "无法定位 dsh CLI：请确认已安装 DeepSeek Harness（npm i -g @deepseek-ai/dsh）".to_string()
+        "Cannot locate dsh CLI: please verify DeepSeek Harness is installed (npm i -g @deepseek-ai/dsh)".to_string()
     })?;
     let output = Command::new(&bin)
         .args(["plugin", "--profile", DSH_PROFILE])
         .args(args)
         .output()
-        .map_err(|e| format!("无法执行 dsh CLI：{e}（请确认已安装 DeepSeek Harness）"))?;
+        .map_err(|e| format!("Failed to execute dsh CLI: {e} (please verify DeepSeek Harness is installed)"))?;
     if output.status.success() {
         Ok(String::from_utf8_lossy(&output.stdout).into_owned())
     } else {
         let err = String::from_utf8_lossy(&output.stderr).into_owned();
         let out = String::from_utf8_lossy(&output.stdout).into_owned();
-        Err(format!("dsh plugin 失败：{err}{out}"))
+        Err(format!("dsh plugin failed: {err}{out}"))
     }
 }
 

@@ -295,7 +295,7 @@ fn register_dynamic_project(state: &AppState, path: &str) -> Option<(PathBuf, bo
     let snapshot = cfg.clone();
     drop(cfg);
     if let Err(error) = config::save(&snapshot) {
-        eprintln!("[projects] 保存动态项目失败: {error}");
+        eprintln!("[projects] Failed to save dynamic projects: {error}");
     } else {
         invalidate_projects_cache(state);
     }
@@ -801,7 +801,7 @@ fn get_wsl_info(state: State<AppState>) -> WslInfo {
 #[tauri::command]
 fn set_wsl_distro(state: State<AppState>, distro: Option<String>) -> Result<(), String> {
     if !cfg!(windows) {
-        return Err("WSL 观察仅支持 Windows".into());
+        return Err("WSL observation mode is only supported on Windows".into());
     }
     let distro = distro
         .filter(|d| !d.trim().is_empty())
@@ -833,7 +833,7 @@ async fn pick_folder(app: AppHandle) -> Option<String> {
 fn add_root(state: State<AppState>, path: String) -> Result<RootsOut, String> {
     let dir = expand(&path);
     if !dir.is_dir() {
-        return Err("目录不存在或不可读".into());
+        return Err("Directory does not exist or is not readable".into());
     }
     let canonical = platform::strip_device_prefix(&dir.to_string_lossy());
     let mut cfg = state.config.lock().unwrap();
@@ -866,7 +866,7 @@ fn get_version() -> String {
 /* 用系统默认浏览器打开 URL（跨平台：macOS open / Windows start / Linux xdg-open）。 */
 #[tauri::command]
 fn open_url(url: String) -> Result<(), String> {
-    open::that(&url).map_err(|error| format!("打开链接失败: {error}"))
+    open::that(&url).map_err(|error| format!("Failed to open URL: {error}"))
 }
 
 #[tauri::command]
@@ -880,7 +880,7 @@ fn list_projects(state: State<AppState>) -> Vec<scan::ProjectInfo> {
 #[tauri::command]
 fn list_tasks(state: State<AppState>, project: String) -> Result<TasksPayload, String> {
     if !is_allowed_project(&state, &project) {
-        return Err("项目未在扫描目录中".into());
+        return Err("Project not found in scanned directories".into());
     }
     /* 默认只扫活跃任务：常规轮询不碰 archive/，避免全项目扫描被归档目录拖慢。
     已归档任务由 list_archived 懒加载（前端勾选「显示已归档」/聚焦归档任务时调用）。 */
@@ -897,7 +897,7 @@ fn list_tasks(state: State<AppState>, project: String) -> Result<TasksPayload, S
 #[tauri::command]
 fn list_archived(state: State<AppState>, project: String) -> Result<ArchivedPayload, String> {
     if !is_allowed_project(&state, &project) {
-        return Err("项目未在扫描目录中".into());
+        return Err("Project not found in scanned directories".into());
     }
     let (tasks, errors) = scan::scan_archived(&expand(&project));
     Ok(ArchivedPayload {
@@ -912,7 +912,7 @@ fn list_archived(state: State<AppState>, project: String) -> Result<ArchivedPayl
 #[tauri::command]
 fn list_relations(state: State<AppState>, project: String) -> Result<RelationsPayload, String> {
     if !is_allowed_project(&state, &project) {
-        return Err("项目未在扫描目录中".into());
+        return Err("Project not found in scanned directories".into());
     }
     /* 关联视图纳入归档任务（spec 共享 / 父子 / 内容树都覆盖归档），
     归档任务的 spec_refs 可能引用已归档的 spec，但正是历史「地盘」的真实痕迹。
@@ -956,7 +956,7 @@ fn list_relations(state: State<AppState>, project: String) -> Result<RelationsPa
 #[tauri::command]
 fn list_specs(state: State<AppState>, project: String) -> Result<Vec<SpecOut>, String> {
     if !is_allowed_project(&state, &project) {
-        return Err("项目未在扫描目录中".into());
+        return Err("Project not found in scanned directories".into());
     }
     let spec_root = expand(&project).join(".trellis").join("spec");
     let mut specs = Vec::new();
@@ -1111,14 +1111,14 @@ fn collect_docs(task_dir: &Path) -> Vec<DocOut> {
                     .trim_start_matches("acceptance-report")
                     .trim_matches('-');
                 if num.is_empty() {
-                    "验收报告".into()
+                    "Acceptance Report".into()
                 } else {
-                    format!("报告 {}", num)
+                    format!("Report {}", num)
                 }
             }
             _ if n.starts_with("research/") => {
                 format!(
-                    "调研·{}",
+                    "Research · {}",
                     n.trim_start_matches("research/").trim_end_matches(".md")
                 )
             }
@@ -1133,7 +1133,7 @@ fn collect_docs(task_dir: &Path) -> Vec<DocOut> {
             let content = std::fs::read_to_string(task_dir.join(&n)).ok()?;
             let content = if content.chars().count() > MAX_CHARS {
                 let cut: String = content.chars().take(MAX_CHARS).collect();
-                format!("{}\n\n…（文档过长，已截断）", cut)
+                format!("{}\n\n...(Document truncated due to length)", cut)
             } else {
                 content
             };
@@ -1149,14 +1149,14 @@ fn collect_docs(task_dir: &Path) -> Vec<DocOut> {
 #[tauri::command]
 fn get_task(state: State<AppState>, project: String, id: String) -> Result<TaskDetail, String> {
     if !is_allowed_project(&state, &project) {
-        return Err("项目未在扫描目录中".into());
+        return Err("Project not found in scanned directories".into());
     }
     let project_dir = expand(&project);
     let (tasks, _) = scan::scan_tasks_with_archived(&project_dir);
     let task = tasks
         .into_iter()
         .find(|t| t.id == id || t.dir == id)
-        .ok_or_else(|| "任务不存在".to_string())?;
+        .ok_or_else(|| "Task does not exist".to_string())?;
     let docs = collect_docs(&project_dir.join(".trellis").join("tasks").join(&task.dir));
     Ok(TaskDetail { task, docs })
 }
@@ -1169,20 +1169,20 @@ fn resolve_archivable_task(
     task: &str,
 ) -> Result<(PathBuf, PathBuf), String> {
     if !is_allowed_project(state, project) {
-        return Err("项目未在扫描目录中".into());
+        return Err("Project not found in scanned directories".into());
     }
     let project_dir = expand(project);
     let task_dir = project_dir.join(".trellis").join("tasks").join(task);
     if !task_dir.is_dir() {
-        return Err(format!("任务不存在: {task}"));
+        return Err(format!("Task does not exist: {task}"));
     }
     if !task_dir.join("task.json").is_file() {
-        return Err(format!("任务缺少 task.json: {task}"));
+        return Err(format!("Task is missing task.json: {task}"));
     }
     /* 只允许归档活跃任务：archive/ 下已是归档，避免重复移动。 */
     let script = project_dir.join(".trellis").join("scripts").join("task.py");
     if !script.is_file() {
-        return Err(format!("项目缺少 Trellis 脚本: {}", script.display()));
+        return Err(format!("Project is missing Trellis script: {}", script.display()));
     }
     Ok((project_dir, script))
 }
@@ -1200,9 +1200,9 @@ fn wsl_archive_command(
     script_unc: &str,
 ) -> Result<(String, String, String), String> {
     let linux_project = crate::platform::linux_from_wsl_unc(project_unc)
-        .ok_or_else(|| "无法将项目 UNC 路径转回 WSL Linux 路径".to_string())?;
+        .ok_or_else(|| "Failed to convert project UNC path to WSL Linux path".to_string())?;
     let linux_script = crate::platform::linux_from_wsl_unc(script_unc)
-        .ok_or_else(|| "无法将 task.py 路径转回 WSL Linux 路径".to_string())?;
+        .ok_or_else(|| "Failed to convert task.py path to WSL Linux path".to_string())?;
     Ok((distro.to_string(), linux_project, linux_script))
 }
 
@@ -1229,12 +1229,12 @@ fn archive_task(
             .arg(&linux_project)
             .args(["python3", &linux_script, "archive", &task])
             .output()
-            .map_err(|e| format!("执行 task.py archive 失败: {e}"))?;
+            .map_err(|e| format!("Failed to execute task.py archive: {e}"))?;
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
             let stdout = String::from_utf8_lossy(&output.stdout);
             return Err(format!(
-                "task.py archive 失败: {}{}",
+                "task.py archive failed: {}{}",
                 if stdout.is_empty() { "" } else { &stdout },
                 if stderr.is_empty() { "" } else { &stderr }
             ));
@@ -1250,12 +1250,12 @@ fn archive_task(
         .args(["archive", &task])
         .current_dir(&project_dir)
         .output()
-        .map_err(|e| format!("执行 task.py archive 失败: {e}"))?;
+        .map_err(|e| format!("Failed to execute task.py archive: {e}"))?;
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         let stdout = String::from_utf8_lossy(&output.stdout);
         return Err(format!(
-            "task.py archive 失败: {}{}",
+            "task.py archive failed: {}{}",
             if stdout.is_empty() { "" } else { &stdout },
             if stderr.is_empty() { "" } else { &stderr }
         ));
@@ -1282,7 +1282,7 @@ fn set_window_mode(
     width: Option<f64>,
     height: Option<f64>,
 ) -> Result<(), String> {
-    let window = app.get_webview_window("main").ok_or("窗口不存在")?;
+    let window = app.get_webview_window("main").ok_or("Window does not exist")?;
     let position = window.outer_position().ok();
     if mode == "capsule" {
         /* 胶囊是紧凑交互态，保持固定尺寸（拉伸会破坏紧凑布局）。 */
@@ -1308,7 +1308,7 @@ fn set_window_mode(
 // 临时调整窗口尺寸（关联画布大展开用）；macOS 无边框窗口需先置可调整。
 #[tauri::command]
 fn set_window_size(app: AppHandle, width: f64, height: f64) -> Result<(), String> {
-    let window = app.get_webview_window("main").ok_or("窗口不存在")?;
+    let window = app.get_webview_window("main").ok_or("Window does not exist")?;
     let position = window.outer_position().ok();
     if !cfg!(windows) {
         let _ = window.set_resizable(true);
@@ -1357,7 +1357,7 @@ fn capsule_window_size(expanded: bool) -> (f64, f64) {
 // 灵动岛展开/收起：原生窗口同步尺寸（消除透明点击死区）。
 #[tauri::command]
 fn set_capsule_expanded(app: AppHandle, expanded: bool) -> Result<(), String> {
-    let window = app.get_webview_window("main").ok_or("窗口不存在")?;
+    let window = app.get_webview_window("main").ok_or("Window does not exist")?;
     let position = window.outer_position().ok();
     let (w, h) = capsule_window_size(expanded);
     window
@@ -1379,11 +1379,11 @@ fn hide_window(app: AppHandle) {
 // 顶部吸附：把窗口移动到当前屏幕顶部中央（紧凑/展开高度自适应当前尺寸）。
 #[tauri::command]
 fn snap_window_top(app: AppHandle) -> Result<(), String> {
-    let window = app.get_webview_window("main").ok_or("窗口不存在")?;
+    let window = app.get_webview_window("main").ok_or("Window does not exist")?;
     let monitor = window
         .current_monitor()
         .map_err(|e| e.to_string())?
-        .ok_or("无当前显示器")?;
+        .ok_or("No current monitor detected")?;
     /* monitor.position()/size() 与 outer_size() 均为物理像素，统一在物理坐标计算。
     set_position(PhysicalPosition) 原样应用，无需按 scale 换算。 */
     let mpos = monitor.position();
@@ -1410,7 +1410,7 @@ fn fit_target_height(content_h: f64) -> f64 {
 
 #[tauri::command]
 fn fit_window_height(app: AppHandle, height: f64) -> Result<(), String> {
-    let window = app.get_webview_window("main").ok_or("窗口不存在")?;
+    let window = app.get_webview_window("main").ok_or("Window does not exist")?;
     let position = window.outer_position().ok();
     let scale = window.scale_factor().map_err(|e| e.to_string())?;
     let size = window.inner_size().map_err(|e| e.to_string())?;
@@ -1546,7 +1546,7 @@ mod tests {
         let labels: Vec<&str> = docs.iter().map(|d| d.label.as_str()).collect();
         assert_eq!(
             labels,
-            ["PRD", "IMPLEMENT", "报告 2", "调研·竞品", "PEER_BRIEF"]
+            ["PRD", "IMPLEMENT", "Report 2", "Research · 竞品", "PEER_BRIEF"]
         );
         assert_eq!(docs[0].content, "prd");
         assert_eq!(docs[3].name, "research/竞品.md");
@@ -1676,7 +1676,7 @@ mod tests {
             priority: Some("P2".into()),
             phase: scan::Phase {
                 id: "implement".into(),
-                label: "实现中".into(),
+                label: "Implementing".into(),
                 warn: false,
             },
             dev_type: None,
@@ -1715,7 +1715,7 @@ mod tests {
             priority: Some("P2".into()),
             phase: scan::Phase {
                 id: "implement".into(),
-                label: "实现中".into(),
+                label: "Implementing".into(),
                 warn: false,
             },
             dev_type: None,
@@ -1749,7 +1749,7 @@ mod tests {
             priority: Some("P2".into()),
             phase: scan::Phase {
                 id: "implement".into(),
-                label: "实现中".into(),
+                label: "Implementing".into(),
                 warn: false,
             },
             dev_type: None,
@@ -2036,7 +2036,7 @@ mod tests {
         let project = root.join("alpha");
         let err = resolve_archivable_task(&state, &project.to_string_lossy(), "no-such-task")
             .unwrap_err();
-        assert!(err.contains("任务不存在"));
+        assert!(err.contains("Task does not exist"));
         std::fs::remove_dir_all(&root).unwrap();
     }
 
@@ -2053,7 +2053,7 @@ mod tests {
 
         let err = resolve_archivable_task(&state, &project.to_string_lossy(), "02-27-user-login")
             .unwrap_err();
-        assert!(err.contains("缺少 Trellis 脚本"));
+        assert!(err.contains("Project is missing Trellis script"));
         std::fs::remove_dir_all(&root).unwrap();
     }
 

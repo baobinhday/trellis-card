@@ -280,7 +280,7 @@ mod tests {
             completed_at: None,
             mtime: 1,
             progress: 0.0,
-            stage: "规划".into(),
+            stage: "Planning".into(),
             lane: 0,
             partial: 0.0,
             kind: "task".into(),
@@ -293,7 +293,7 @@ mod tests {
             prd_refs: Vec::new(),
             phase: Phase {
                 id: "explore".into(),
-                label: "规划".into(),
+                label: "Planning".into(),
                 warn: false,
             },
             dir: "07-26-cpa-cpamp-apk".into(),
