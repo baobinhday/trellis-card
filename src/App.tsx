@@ -183,7 +183,7 @@ export const App: React.FC = () => {
       />
 
       {/* Main Area */}
-      <div className="flex-1 flex flex-col h-full min-w-0 overflow-hidden">
+      <div className="flex-1 flex flex-col h-full min-w-0 min-h-0 overflow-hidden">
         <Header
           project={selectedProject}
           searchQuery={searchQuery}

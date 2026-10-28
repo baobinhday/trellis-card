@@ -108,15 +108,15 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
   };
 
   return (
-    <div className="flex-1 h-full overflow-x-auto overflow-y-hidden p-6 bg-gray-50/50 dark:bg-trellis-darkBg transition-colors">
-      <div className="grid grid-cols-4 gap-5 h-full min-w-[1050px]">
+    <div className="flex-1 min-h-0 overflow-x-auto overflow-y-hidden p-6 bg-gray-50/50 dark:bg-trellis-darkBg transition-colors flex flex-col">
+      <div className="grid grid-cols-4 grid-rows-1 gap-5 flex-1 min-h-0 min-w-[1050px]">
         {COLUMNS.map((col) => {
           const colTasks = filteredTasks.filter((t) => getTaskColumn(t) === col.id);
 
           return (
             <div
               key={col.id}
-              className="flex flex-col h-full bg-gray-100/70 dark:bg-trellis-darkCard/50 border border-gray-200/80 dark:border-trellis-darkBorder/80 rounded-2xl p-3"
+              className="flex flex-col h-full min-h-0 bg-gray-100/70 dark:bg-trellis-darkCard/50 border border-gray-200/80 dark:border-trellis-darkBorder/80 rounded-2xl p-3"
             >
               {/* Column Header */}
               <div className="flex items-center justify-between pb-3 px-1 border-b border-gray-200/60 dark:border-trellis-darkBorder/60 mb-3 flex-shrink-0">
@@ -132,7 +132,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
               </div>
 
               {/* Cards Container */}
-              <div className="flex-1 overflow-y-auto space-y-3 pr-1">
+              <div className="flex-1 min-h-0 overflow-y-auto space-y-3 pr-1.5 pb-2">
                 {colTasks.length === 0 ? (
                   <div className="h-44 flex flex-col items-center justify-center text-center p-4 rounded-xl border border-dashed border-gray-200 dark:border-gray-800/80">
                     <Inbox className="w-7 h-7 text-gray-300 dark:text-gray-600 mb-1.5" />
