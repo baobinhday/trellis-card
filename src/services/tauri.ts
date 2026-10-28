@@ -56,6 +56,30 @@ export async function getTask(project: string, id: string): Promise<TaskDetail> 
   return await invokeTauri<TaskDetail>("get_task", { project, id });
 }
 
+// Archive a task
+export async function archiveTask(project: string, task: string): Promise<boolean> {
+  return await invokeTauri<boolean>("archive_task", { project, task });
+}
+
+// Listen to real-time file watcher & hook changes across tasks
+export async function listenToTaskChanges(callback: () => void): Promise<() => void> {
+  if (isTauri()) {
+    try {
+      const { listen } = await import("@tauri-apps/api/event");
+      const unlisten1 = await listen("tasks-changed", () => callback());
+      const unlisten2 = await listen("hook-tasks-changed", () => callback());
+      return () => {
+        unlisten1();
+        unlisten2();
+      };
+    } catch (err) {
+      console.error("[Tauri Event Error] listenToTaskChanges:", err);
+      return () => {};
+    }
+  }
+  return () => {};
+}
+
 // Open a URL or local file path
 export async function openUrl(url: string): Promise<void> {
   return await invokeTauri<void>("open_url", { url });
@@ -181,6 +205,9 @@ function getMockResponse<T>(cmd: string, args?: Record<string, unknown>): T {
   }
   if (cmd === "add_root" || cmd === "remove_root") {
     return { roots: ["/home/b560/Project/test/trellis-card"] } as unknown as T;
+  }
+  if (cmd === "archive_task") {
+    return true as unknown as T;
   }
   return null as unknown as T;
 }

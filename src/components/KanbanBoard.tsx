@@ -14,6 +14,7 @@ interface KanbanBoardProps {
   onSelectTask: (task: TrellisTask) => void;
   searchQuery: string;
   priorityFilter: string;
+  onArchiveTask?: (task: TrellisTask) => void;
 }
 
 const COLUMNS: KanbanColumnDef[] = [
@@ -64,6 +65,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
   onSelectTask,
   searchQuery,
   priorityFilter,
+  onArchiveTask,
 }) => {
   // Helper to map task to appropriate Kanban column
   const getTaskColumn = (task: TrellisTask): KanbanColumnId => {
@@ -144,6 +146,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
                       key={task.id || task.dir}
                       task={task}
                       onClick={() => onSelectTask(task)}
+                      onArchive={onArchiveTask ? (t) => onArchiveTask(t) : undefined}
                     />
                   ))
                 )}

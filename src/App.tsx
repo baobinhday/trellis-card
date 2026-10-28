@@ -13,6 +13,9 @@ import {
   removeRoot,
   openUrl,
   openInEditor,
+  archiveTask,
+  listenToTaskChanges,
+  isTauri,
 } from "./services/tauri";
 
 export const App: React.FC = () => {
@@ -32,6 +35,7 @@ export const App: React.FC = () => {
         window.matchMedia("(prefers-color-scheme: dark)").matches)
     );
   });
+  const [isLiveSynced] = useState<boolean>(isTauri());
 
   // Dark mode effect
   useEffect(() => {
@@ -109,6 +113,47 @@ export const App: React.FC = () => {
       setArchivedTasks([]);
     }
   }, [selectedProject, loadTasks]);
+
+  // Real-time task watcher listener via Tauri events
+  useEffect(() => {
+    if (!selectedProject) return;
+
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+    let cleanup: (() => void) | null = null;
+
+    listenToTaskChanges(() => {
+      if (debounceTimer) clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => {
+        loadTasks(selectedProject.path);
+      }, 250);
+    }).then((unlisten) => {
+      cleanup = unlisten;
+    });
+
+    return () => {
+      if (debounceTimer) clearTimeout(debounceTimer);
+      if (cleanup) cleanup();
+    };
+  }, [selectedProject, loadTasks]);
+
+  // Archive a task
+  const handleArchiveTask = async (task: TrellisTask) => {
+    if (!selectedProject) return;
+    try {
+      const taskId = task.dir || task.id;
+      const success = await archiveTask(selectedProject.path, taskId);
+      if (success) {
+        if (selectedTask && (selectedTask.id === task.id || selectedTask.dir === task.dir)) {
+          setSelectedTask((prev) => (prev ? { ...prev, archived: true } : null));
+        }
+        await loadTasks(selectedProject.path);
+        await refreshProjects();
+      }
+    } catch (err) {
+      console.error("Failed to archive task:", err);
+      alert(`Không thể lưu trữ task: ${err}`);
+    }
+  };
 
   // Listen for manual path input
   useEffect(() => {
@@ -197,6 +242,7 @@ export const App: React.FC = () => {
           onOpenInEditor={(p) => openInEditor(p)}
           onRefresh={() => selectedProject && loadTasks(selectedProject.path)}
           isLoading={isLoading}
+          isLiveSynced={isLiveSynced}
         />
 
         {selectedProject ? (
@@ -205,6 +251,7 @@ export const App: React.FC = () => {
             onSelectTask={(task) => setSelectedTask(task)}
             searchQuery={searchQuery}
             priorityFilter={priorityFilter}
+            onArchiveTask={handleArchiveTask}
           />
         ) : (
           <div className="flex-1 flex flex-col items-center justify-center text-center p-8 text-gray-500 dark:text-gray-400">
@@ -237,6 +284,7 @@ export const App: React.FC = () => {
           onClose={() => setSelectedTask(null)}
           onOpenFolder={(p) => openUrl(p)}
           onOpenInEditor={(p) => openInEditor(p)}
+          onArchive={handleArchiveTask}
         />
       )}
     </div>

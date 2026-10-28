@@ -10,9 +10,10 @@ import { TrellisTask } from "../types";
 interface TaskCardProps {
   task: TrellisTask;
   onClick: () => void;
+  onArchive?: (task: TrellisTask, e: React.MouseEvent) => void;
 }
 
-export const TaskCard: React.FC<TaskCardProps> = ({ task, onClick }) => {
+export const TaskCard: React.FC<TaskCardProps> = ({ task, onClick, onArchive }) => {
   const getPriorityBadge = (priority: string) => {
     switch (priority) {
       case "P0":
@@ -54,16 +55,33 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, onClick }) => {
           )}
         </div>
 
-        {task.archived ? (
-          <span className="text-[10px] text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/50 px-1.5 py-0.5 rounded border border-amber-200/60 dark:border-amber-900/50 flex items-center gap-1 font-medium">
-            <Archive className="w-2.5 h-2.5" />
-            <span>Archived</span>
-          </span>
-        ) : task.phase ? (
-          <span className="text-[10px] text-gray-400 dark:text-gray-500 font-medium truncate max-w-[120px]">
-            {task.phase.label}
-          </span>
-        ) : null}
+        <div className="flex items-center gap-1.5 flex-shrink-0">
+          {!task.archived && onArchive && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onArchive(task, e);
+              }}
+              title="Lưu trữ task (Archive)"
+              aria-label="Archive task"
+              className="opacity-0 group-hover:opacity-100 p-1 rounded text-gray-400 hover:text-amber-600 dark:hover:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/40 transition-all"
+            >
+              <Archive className="w-3 h-3" />
+            </button>
+          )}
+
+          {task.archived ? (
+            <span className="text-[10px] text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/50 px-1.5 py-0.5 rounded border border-amber-200/60 dark:border-amber-900/50 flex items-center gap-1 font-medium">
+              <Archive className="w-2.5 h-2.5" />
+              <span>Archived</span>
+            </span>
+          ) : task.phase ? (
+            <span className="text-[10px] text-gray-400 dark:text-gray-500 font-medium truncate max-w-[120px]">
+              {task.phase.label}
+            </span>
+          ) : null}
+        </div>
       </div>
 
       {/* Task Title */}

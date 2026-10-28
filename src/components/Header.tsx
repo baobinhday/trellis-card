@@ -22,6 +22,7 @@ interface HeaderProps {
   onOpenInEditor: (path: string) => void;
   onRefresh: () => void;
   isLoading: boolean;
+  isLiveSynced?: boolean;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -37,6 +38,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenInEditor,
   onRefresh,
   isLoading,
+  isLiveSynced = false,
 }) => {
   if (!project) {
     return (
@@ -58,6 +60,15 @@ export const Header: React.FC<HeaderProps> = ({
             <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-900/40">
               {project.taskCount} tasks
             </span>
+            {isLiveSynced && (
+              <span
+                title="Tự động đồng bộ thời gian thực khi file thay đổi"
+                className="hidden md:inline-flex items-center gap-1.5 text-[10px] font-medium px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border border-emerald-200/60 dark:border-emerald-900/40"
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                Live
+              </span>
+            )}
           </div>
           <p className="text-[11px] text-gray-400 dark:text-gray-500 truncate max-w-sm" title={project.path}>
             {project.path}

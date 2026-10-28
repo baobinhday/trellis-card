@@ -24,6 +24,7 @@ interface TaskDetailModalProps {
   onClose: () => void;
   onOpenFolder: (path: string) => void;
   onOpenInEditor: (path: string) => void;
+  onArchive?: (task: TrellisTask) => Promise<void> | void;
 }
 
 export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
@@ -32,12 +33,28 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
   onClose,
   onOpenFolder,
   onOpenInEditor,
+  onArchive,
 }) => {
   const [docs, setDocs] = useState<DocOut[]>([]);
   const [activeDocIndex, setActiveDocIndex] = useState(0);
   const [isLoadingDocs, setIsLoadingDocs] = useState(false);
   const [copiedTitle, setCopiedTitle] = useState(false);
   const [copiedDir, setCopiedDir] = useState(false);
+  const [isArchiving, setIsArchiving] = useState(false);
+
+  const handleArchive = async () => {
+    if (!task || !onArchive || isArchiving) return;
+    const confirmed = window.confirm(`Bạn có chắc chắn muốn lưu trữ (archive) task "${task.title}" không?`);
+    if (!confirmed) return;
+    setIsArchiving(true);
+    try {
+      await onArchive(task);
+    } catch (err) {
+      console.error("Failed to archive task:", err);
+    } finally {
+      setIsArchiving(false);
+    }
+  };
 
   const handleCopyTitle = async () => {
     if (!task) return;
@@ -156,6 +173,23 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
           </div>
 
           <div className="flex items-center gap-2 flex-shrink-0">
+            {!task.archived && onArchive && (
+              <button
+                type="button"
+                onClick={handleArchive}
+                disabled={isArchiving}
+                title="Lưu trữ task (Archive task)"
+                aria-label="Lưu trữ task"
+                className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/50 hover:bg-amber-100 dark:hover:bg-amber-900/60 border border-amber-200 dark:border-amber-900/50 rounded-lg transition-colors disabled:opacity-50"
+              >
+                {isArchiving ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Archive className="w-3.5 h-3.5" />
+                )}
+                <span>Archive</span>
+              </button>
+            )}
             <button
               onClick={() => onOpenFolder(taskFullPath)}
               title="Open task folder"

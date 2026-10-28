@@ -72,12 +72,13 @@ Tasks automatically map to the four core Trellis lifecycle phases:
 ### 4. Interactive Slide-Over Task Detail
 - Click any task card to reveal the complete task metadata without leaving your workspace.
 - Built-in Markdown renderer (GFM) displaying `prd.md`, `design.md`, `implement.md`, and research notes.
-- Quick action buttons to launch the task directory directly in **Cursor**, **VS Code**, or your system file manager (**Finder** / **File Explorer** / **Nautilus**).
+- Quick action buttons to archive tasks directly, or launch the task directory directly in **Cursor**, **VS Code**, or your system file manager (**Finder** / **File Explorer** / **Nautilus**).
 
-### 5. Instant Filtering & Search
+### 5. Instant Filtering & Real-time Sync
+- Real-time auto-synchronization listening to file system changes via native watcher (`watch.rs`).
 - Search in real-time across task titles, slugs, and descriptions.
 - Filter by priority tier (`All`, `P0`, `P1`, `P2`, `P3`).
-- Toggle visibility for archived historical tasks on demand.
+- Toggle visibility for archived historical tasks on demand, with quick archive actions on task cards.
 
 ### 6. Dark & Light Theme Support
 - Clean UI with seamless theme switching (persisted locally across sessions).
