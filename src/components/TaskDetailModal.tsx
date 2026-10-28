@@ -12,6 +12,8 @@ import {
   FileText,
   Loader2,
   Archive,
+  Copy,
+  Check,
 } from "lucide-react";
 import { TrellisTask, DocOut } from "../types";
 import { getTask } from "../services/tauri";
@@ -34,6 +36,30 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
   const [docs, setDocs] = useState<DocOut[]>([]);
   const [activeDocIndex, setActiveDocIndex] = useState(0);
   const [isLoadingDocs, setIsLoadingDocs] = useState(false);
+  const [copiedTitle, setCopiedTitle] = useState(false);
+  const [copiedDir, setCopiedDir] = useState(false);
+
+  const handleCopyTitle = async () => {
+    if (!task) return;
+    try {
+      await navigator.clipboard.writeText(task.title);
+      setCopiedTitle(true);
+      setTimeout(() => setCopiedTitle(false), 2000);
+    } catch (err) {
+      console.error("Failed to copy task title:", err);
+    }
+  };
+
+  const handleCopyDir = async () => {
+    if (!task) return;
+    try {
+      await navigator.clipboard.writeText(task.dir || task.id);
+      setCopiedDir(true);
+      setTimeout(() => setCopiedDir(false), 2000);
+    } catch (err) {
+      console.error("Failed to copy task directory:", err);
+    }
+  };
 
   useEffect(() => {
     if (!task) return;
@@ -87,13 +113,46 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
               )}
             </div>
 
-            <h2 className="text-base font-bold text-gray-900 dark:text-gray-100 leading-snug">
-              {task.title}
-            </h2>
+            <div className="flex items-start gap-2 group/title">
+              <h2 className="text-base font-bold text-gray-900 dark:text-gray-100 leading-snug">
+                {task.title}
+              </h2>
+              <button
+                type="button"
+                onClick={handleCopyTitle}
+                title={copiedTitle ? "Đã sao chép tên task!" : "Sao chép tên task"}
+                aria-label="Sao chép tên task"
+                className="mt-0.5 p-1 rounded-md text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors flex items-center gap-1 text-xs flex-shrink-0"
+              >
+                {copiedTitle ? (
+                  <>
+                    <Check className="w-3.5 h-3.5 text-emerald-500" />
+                    <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium">Đã chép</span>
+                  </>
+                ) : (
+                  <Copy className="w-3.5 h-3.5 text-gray-400 group-hover/title:text-gray-600 dark:group-hover/title:text-gray-300 transition-colors" />
+                )}
+              </button>
+            </div>
 
-            <p className="text-xs font-mono text-gray-400 dark:text-gray-500 mt-1">
-              {task.dir || task.id}
-            </p>
+            <div className="flex items-center gap-1.5 mt-1 group/dir">
+              <p className="text-xs font-mono text-gray-400 dark:text-gray-500">
+                {task.dir || task.id}
+              </p>
+              <button
+                type="button"
+                onClick={handleCopyDir}
+                title={copiedDir ? "Đã sao chép thư mục task!" : "Sao chép mã/thư mục task"}
+                aria-label="Sao chép mã/thư mục task"
+                className="p-1 rounded text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+              >
+                {copiedDir ? (
+                  <Check className="w-3 h-3 text-emerald-500" />
+                ) : (
+                  <Copy className="w-3 h-3 text-gray-400 group-hover/dir:text-gray-600 dark:group-hover/dir:text-gray-300 transition-colors" />
+                )}
+              </button>
+            </div>
           </div>
 
           <div className="flex items-center gap-2 flex-shrink-0">
@@ -203,7 +262,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
         </div>
 
         {/* Markdown Document Content Area */}
-        <div className="flex-1 overflow-y-auto p-6 text-sm text-gray-800 dark:text-gray-200 prose prose-indigo dark:prose-invert max-w-none">
+        <div className="flex-1 min-h-0 overflow-y-auto p-6 text-sm text-gray-800 dark:text-gray-200 prose prose-indigo dark:prose-invert max-w-none">
           {isLoadingDocs ? (
             <div className="h-64 flex flex-col items-center justify-center gap-2 text-gray-400">
               <Loader2 className="w-6 h-6 animate-spin text-indigo-500" />
