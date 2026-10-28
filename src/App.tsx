@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { Sidebar } from "./components/Sidebar";
 import { Header } from "./components/Header";
 import { KanbanBoard } from "./components/KanbanBoard";
@@ -54,8 +54,10 @@ export const App: React.FC = () => {
   }, [darkMode]);
 
   // Load all tasks for the selected project
-  const loadTasks = useCallback(async (projectPath: string) => {
-    setIsLoading(true);
+  const loadTasks = useCallback(async (projectPath: string, options?: { silent?: boolean }) => {
+    if (!options?.silent) {
+      setIsLoading(true);
+    }
     try {
       const [activeRes, archivedRes] = await Promise.all([
         listTasks(projectPath).catch((e) => {
@@ -68,39 +70,62 @@ export const App: React.FC = () => {
         }),
       ]);
 
-      setActiveTasks(activeRes.tasks || []);
-      setArchivedTasks((archivedRes.tasks || []).map((t) => ({ ...t, archived: true })));
+      const tasks = activeRes.tasks || [];
+      const archived = (archivedRes.tasks || []).map((t) => ({ ...t, archived: true }));
+      setActiveTasks(tasks);
+      setArchivedTasks(archived);
+
+      // Immediately sync active task count for this project in the sidebar and header
+      const count = tasks.length;
+      setProjects((prev) =>
+        prev.map((p) => (p.path === projectPath ? { ...p, taskCount: count } : p))
+      );
+      setSelectedProject((prev) =>
+        prev && prev.path === projectPath ? { ...prev, taskCount: count } : prev
+      );
     } catch (err) {
       console.error("Error loading tasks:", err);
     } finally {
-      setIsLoading(false);
+      if (!options?.silent) {
+        setIsLoading(false);
+      }
     }
   }, []);
 
-  // Fetch discovered projects on startup
-  const refreshProjects = useCallback(async () => {
-    setIsLoading(true);
+  // Fetch discovered projects on startup or refresh
+  const refreshProjects = useCallback(async (options?: { silent?: boolean }) => {
+    if (!options?.silent) {
+      setIsLoading(true);
+    }
     try {
       const projs = await listProjects();
       setProjects(projs);
 
-      // Select stored or first project
-      const lastPath = localStorage.getItem("trellis_last_project");
-      const matched = projs.find((p) => p.path === lastPath);
+      setSelectedProject((prev) => {
+        // If we already have a selected project, keep it and update its metadata
+        if (prev) {
+          const matchedCurrent = projs.find((p) => p.path === prev.path);
+          if (matchedCurrent) return matchedCurrent;
+        }
 
-      if (matched) {
-        setSelectedProject(matched);
-      } else if (projs.length > 0) {
-        setSelectedProject(projs[0]);
-      } else {
-        setSelectedProject(null);
-        setActiveTasks([]);
-        setArchivedTasks([]);
-      }
+        // Select stored or first project
+        const lastPath = localStorage.getItem("trellis_last_project");
+        const matched = projs.find((p) => p.path === lastPath);
+
+        if (matched) {
+          return matched;
+        } else if (projs.length > 0) {
+          return projs[0];
+        } else {
+          return null;
+        }
+      });
     } catch (err) {
       console.error("Failed to load projects:", err);
     } finally {
-      setIsLoading(false);
+      if (!options?.silent) {
+        setIsLoading(false);
+      }
     }
   }, []);
 
@@ -108,28 +133,36 @@ export const App: React.FC = () => {
     refreshProjects();
   }, [refreshProjects]);
 
+  // Track currently selected project path for background watcher
+  const selectedProjectPathRef = useRef<string | null>(null);
+  useEffect(() => {
+    selectedProjectPathRef.current = selectedProject?.path || null;
+  }, [selectedProject?.path]);
+
   // Reload tasks when selected project changes
   useEffect(() => {
-    if (selectedProject) {
+    if (selectedProject?.path) {
       localStorage.setItem("trellis_last_project", selectedProject.path);
       loadTasks(selectedProject.path);
     } else {
       setActiveTasks([]);
       setArchivedTasks([]);
     }
-  }, [selectedProject, loadTasks]);
+  }, [selectedProject?.path, loadTasks]);
 
-  // Real-time task watcher listener via Tauri events
+  // Real-time task & project watcher listener via Tauri events
   useEffect(() => {
-    if (!selectedProject) return;
-
     let debounceTimer: ReturnType<typeof setTimeout> | null = null;
     let cleanup: (() => void) | null = null;
 
     listenToTaskChanges(() => {
       if (debounceTimer) clearTimeout(debounceTimer);
-      debounceTimer = setTimeout(() => {
-        loadTasks(selectedProject.path);
+      debounceTimer = setTimeout(async () => {
+        const currentPath = selectedProjectPathRef.current;
+        if (currentPath) {
+          await loadTasks(currentPath, { silent: true });
+        }
+        await refreshProjects({ silent: true });
       }, 250);
     }).then((unlisten) => {
       cleanup = unlisten;
@@ -139,7 +172,7 @@ export const App: React.FC = () => {
       if (debounceTimer) clearTimeout(debounceTimer);
       if (cleanup) cleanup();
     };
-  }, [selectedProject, loadTasks]);
+  }, [loadTasks, refreshProjects]);
 
   // Archive a task
   const handleArchiveTask = async (task: TrellisTask) => {
@@ -310,11 +343,17 @@ export const App: React.FC = () => {
         onSelectProject={(p) => setSelectedProject(p)}
         onAddProject={handleAddProject}
         onRemoveProject={handleRemoveProject}
-        onRefresh={refreshProjects}
+        onRefresh={async () => {
+          await refreshProjects();
+          if (selectedProject) {
+            await loadTasks(selectedProject.path);
+          }
+        }}
         isLoading={isLoading}
         darkMode={darkMode}
         onToggleDarkMode={() => setDarkMode(!darkMode)}
         onOpenFolder={(p) => openUrl(p)}
+        isLiveSynced={isLiveSynced}
       />
 
       {/* Main Area */}
@@ -330,7 +369,12 @@ export const App: React.FC = () => {
           archivedCount={archivedTasks.length}
           onOpenFolder={(p) => openUrl(p)}
           onOpenInEditor={(p) => openInEditor(p)}
-          onRefresh={() => selectedProject && loadTasks(selectedProject.path)}
+          onRefresh={async () => {
+            if (selectedProject) {
+              await loadTasks(selectedProject.path);
+            }
+            await refreshProjects();
+          }}
           isLoading={isLoading}
           isLiveSynced={isLiveSynced}
           onOpenSpecs={() => handleOpenSpec()}

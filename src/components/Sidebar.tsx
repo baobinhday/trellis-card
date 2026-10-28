@@ -23,6 +23,7 @@ interface SidebarProps {
   darkMode: boolean;
   onToggleDarkMode: () => void;
   onOpenFolder: (path: string) => void;
+  isLiveSynced?: boolean;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -36,6 +37,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   darkMode,
   onToggleDarkMode,
   onOpenFolder,
+  isLiveSynced = false,
 }) => {
   const [showManualInput, setShowManualInput] = useState(false);
   const [manualPath, setManualPath] = useState("");
@@ -205,9 +207,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
       {/* Bottom Status & Theme Bar */}
       <div className="p-3 border-t border-gray-200 dark:border-trellis-darkBorder flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
-        <div className="flex items-center gap-1.5">
-          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
-          <span className="text-[11px]">Trellis Ready</span>
+        <div className="flex items-center gap-1.5" title={isLiveSynced ? "Tự động đồng bộ thời gian thực khi tasks thay đổi" : "Trellis Ready"}>
+          {isLiveSynced ? (
+            <>
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">Live Synced</span>
+            </>
+          ) : (
+            <>
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+              <span className="text-[11px]">Trellis Ready</span>
+            </>
+          )}
         </div>
 
         <button

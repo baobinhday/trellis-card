@@ -22,7 +22,14 @@ pub fn is_relevant_task_event(path: &Path) -> bool {
     else {
         return false;
     };
-    let rest = &comps[index + 3..];
+    let rest = if comps[index + 2] == "archive" {
+        if comps.len() <= index + 4 {
+            return false;
+        }
+        &comps[index + 4..]
+    } else {
+        &comps[index + 3..]
+    };
     if rest.len() == 1 {
         let file = rest[0].as_str();
         return matches!(
@@ -141,6 +148,9 @@ mod tests {
     fn matches_relevant_task_artifacts_and_rejects_unrelated_files() {
         assert!(is_relevant_task_event(Path::new(
             "/x/proj/.trellis/tasks/01-a/task.json"
+        )));
+        assert!(is_relevant_task_event(Path::new(
+            "/x/proj/.trellis/tasks/archive/01-a/task.json"
         )));
         assert!(is_relevant_task_event(Path::new(
             "/x/proj/.trellis/tasks/01-a/prd.md"
