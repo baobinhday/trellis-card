@@ -25,6 +25,7 @@ interface TaskDetailModalProps {
   onOpenFolder: (path: string) => void;
   onOpenInEditor: (path: string) => void;
   onArchive?: (task: TrellisTask) => Promise<void> | void;
+  onToggleSubtask?: (task: TrellisTask, index: number, completed: boolean) => Promise<void> | void;
 }
 
 export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
@@ -34,6 +35,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
   onOpenFolder,
   onOpenInEditor,
   onArchive,
+  onToggleSubtask,
 }) => {
   const [docs, setDocs] = useState<DocOut[]>([]);
   const [activeDocIndex, setActiveDocIndex] = useState(0);
@@ -41,6 +43,26 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
   const [copiedTitle, setCopiedTitle] = useState(false);
   const [copiedDir, setCopiedDir] = useState(false);
   const [isArchiving, setIsArchiving] = useState(false);
+  const [subtasks, setSubtasks] = useState(task?.subtasks || []);
+
+  useEffect(() => {
+    setSubtasks(task?.subtasks || []);
+  }, [task]);
+
+  const handleToggleSubtask = async (idx: number, currentDone: boolean) => {
+    if (!task || !onToggleSubtask) return;
+    const newDone = !currentDone;
+    // Optimistic local update
+    setSubtasks((prev) =>
+      prev.map((s, i) => (i === idx ? { ...s, status: newDone ? "completed" : "pending" } : s))
+    );
+    try {
+      await onToggleSubtask(task, idx, newDone);
+    } catch (err) {
+      console.error("Failed to toggle subtask:", err);
+      setSubtasks(task.subtasks || []);
+    }
+  };
 
   const handleArchive = async () => {
     if (!task || !onArchive || isArchiving) return;
@@ -238,35 +260,57 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
         </div>
 
         {/* Subtasks Section if present */}
-        {task.subtasks && task.subtasks.length > 0 && (
-          <div className="px-5 py-3 border-b border-gray-200 dark:border-trellis-darkBorder bg-white dark:bg-trellis-darkCard flex-shrink-0">
-            <h4 className="text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-              <CheckSquare className="w-3.5 h-3.5 text-emerald-500" />
-              <span>Subtasks ({task.subtasks.filter(s => s.status === 'completed').length}/{task.subtasks.length})</span>
-            </h4>
-            <div className="space-y-1.5 max-h-32 overflow-y-auto pr-1">
-              {task.subtasks.map((sub, idx) => {
-                const isDone = sub.status === "completed" || sub.status === "done";
-                return (
-                  <div
-                    key={idx}
-                    className="flex items-center gap-2 text-xs text-gray-700 dark:text-gray-300 py-1 px-2 rounded-lg bg-gray-50 dark:bg-gray-800/50"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={isDone}
-                      readOnly
-                      className="rounded border-gray-300 text-indigo-600 focus:ring-0 cursor-default"
-                    />
-                    <span className={isDone ? "line-through text-gray-400 dark:text-gray-500" : ""}>
-                      {sub.name}
-                    </span>
-                  </div>
-                );
-              })}
+        {subtasks && subtasks.length > 0 && (() => {
+          const completedCount = subtasks.filter((s) => s.status === "completed" || s.status === "done").length;
+          const totalCount = subtasks.length;
+          const percent = Math.round((completedCount / totalCount) * 100);
+
+          return (
+            <div className="px-5 py-3 border-b border-gray-200 dark:border-trellis-darkBorder bg-white dark:bg-trellis-darkCard flex-shrink-0">
+              <div className="flex items-center justify-between mb-2">
+                <h4 className="text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider flex items-center gap-1.5">
+                  <CheckSquare className="w-3.5 h-3.5 text-emerald-500" />
+                  <span>Subtasks ({completedCount}/{totalCount})</span>
+                </h4>
+                <span className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
+                  {percent}%
+                </span>
+              </div>
+              <div className="w-full h-1.5 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden mb-2.5">
+                <div
+                  className="h-full bg-emerald-500 rounded-full transition-all duration-300"
+                  style={{ width: `${percent}%` }}
+                />
+              </div>
+              <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1">
+                {subtasks.map((sub, idx) => {
+                  const isDone = sub.status === "completed" || sub.status === "done";
+                  return (
+                    <label
+                      key={idx}
+                      className={`flex items-center gap-2.5 text-xs py-1.5 px-2.5 rounded-lg border transition-colors cursor-pointer select-none ${
+                        isDone
+                          ? "bg-emerald-50/40 dark:bg-emerald-950/20 border-emerald-200/50 dark:border-emerald-900/30 text-gray-500 dark:text-gray-400"
+                          : "bg-gray-50 dark:bg-gray-800/50 border-gray-100 dark:border-gray-800 text-gray-800 dark:text-gray-200 hover:border-indigo-300 dark:hover:border-indigo-700"
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isDone}
+                        onChange={() => handleToggleSubtask(idx, isDone)}
+                        disabled={task.archived}
+                        className="rounded border-gray-300 dark:border-gray-600 text-indigo-600 focus:ring-0 cursor-pointer w-3.5 h-3.5"
+                      />
+                      <span className={`flex-1 ${isDone ? "line-through text-gray-400 dark:text-gray-500" : ""}`}>
+                        {sub.name}
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
 
         {/* Document Navigation Tabs */}
         <div className="px-5 pt-3 border-b border-gray-200 dark:border-trellis-darkBorder flex items-center gap-2 overflow-x-auto flex-shrink-0 bg-gray-50/50 dark:bg-gray-900/20">

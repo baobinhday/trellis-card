@@ -61,6 +61,16 @@ export async function archiveTask(project: string, task: string): Promise<boolea
   return await invokeTauri<boolean>("archive_task", { project, task });
 }
 
+// Update task status (for drag-and-drop column transitions)
+export async function updateTaskStatus(project: string, task: string, status: string): Promise<boolean> {
+  return await invokeTauri<boolean>("update_task_status", { project, task, status });
+}
+
+// Toggle subtask completion status
+export async function toggleSubtask(project: string, task: string, index: number, completed: boolean): Promise<boolean> {
+  return await invokeTauri<boolean>("toggle_subtask", { project, task, index, completed });
+}
+
 // Listen to real-time file watcher & hook changes across tasks
 export async function listenToTaskChanges(callback: () => void): Promise<() => void> {
   if (isTauri()) {
@@ -206,7 +216,7 @@ function getMockResponse<T>(cmd: string, args?: Record<string, unknown>): T {
   if (cmd === "add_root" || cmd === "remove_root") {
     return { roots: ["/home/b560/Project/test/trellis-card"] } as unknown as T;
   }
-  if (cmd === "archive_task") {
+  if (cmd === "archive_task" || cmd === "update_task_status" || cmd === "toggle_subtask") {
     return true as unknown as T;
   }
   return null as unknown as T;

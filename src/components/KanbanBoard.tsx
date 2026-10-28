@@ -15,6 +15,7 @@ interface KanbanBoardProps {
   searchQuery: string;
   priorityFilter: string;
   onArchiveTask?: (task: TrellisTask) => void;
+  onMoveTask?: (taskId: string, targetStatus: string) => void;
 }
 
 const COLUMNS: KanbanColumnDef[] = [
@@ -66,7 +67,9 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
   searchQuery,
   priorityFilter,
   onArchiveTask,
+  onMoveTask,
 }) => {
+  const [dragOverCol, setDragOverCol] = React.useState<string | null>(null);
   // Helper to map task to appropriate Kanban column
   const getTaskColumn = (task: TrellisTask): KanbanColumnId => {
     if (task.archived || task.status === "completed" || task.status === "done") {
@@ -118,7 +121,28 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
           return (
             <div
               key={col.id}
-              className="flex flex-col h-full min-h-0 bg-gray-100/70 dark:bg-trellis-darkCard/50 border border-gray-200/80 dark:border-trellis-darkBorder/80 rounded-2xl p-3"
+              onDragOver={(e) => {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = "move";
+                if (dragOverCol !== col.id) setDragOverCol(col.id);
+              }}
+              onDragLeave={(e) => {
+                if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+                setDragOverCol(null);
+              }}
+              onDrop={(e) => {
+                e.preventDefault();
+                setDragOverCol(null);
+                const taskId = e.dataTransfer.getData("text/plain");
+                if (taskId && onMoveTask) {
+                  onMoveTask(taskId, col.id);
+                }
+              }}
+              className={`flex flex-col h-full min-h-0 bg-gray-100/70 dark:bg-trellis-darkCard/50 border rounded-2xl p-3 transition-all duration-150 ${
+                dragOverCol === col.id
+                  ? "border-indigo-500 dark:border-indigo-400 ring-2 ring-indigo-500/30 bg-indigo-50/40 dark:bg-indigo-950/30 shadow-md"
+                  : "border-gray-200/80 dark:border-trellis-darkBorder/80"
+              }`}
             >
               {/* Column Header */}
               <div className="flex items-center justify-between pb-3 px-1 border-b border-gray-200/60 dark:border-trellis-darkBorder/60 mb-3 flex-shrink-0">

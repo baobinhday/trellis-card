@@ -15,6 +15,8 @@ import {
   openInEditor,
   archiveTask,
   listenToTaskChanges,
+  updateTaskStatus,
+  toggleSubtask,
   isTauri,
 } from "./services/tauri";
 
@@ -155,6 +157,76 @@ export const App: React.FC = () => {
     }
   };
 
+  // Drag and drop task status transition
+  const handleMoveTask = async (taskId: string, targetStatus: string) => {
+    if (!selectedProject) return;
+
+    const task = activeTasks.find((t) => t.id === taskId || t.dir === taskId);
+    if (!task || task.status === targetStatus) return;
+
+    const originalStatus = task.status;
+    const taskDir = task.dir || task.id;
+
+    // Optimistic update
+    setActiveTasks((prev) =>
+      prev.map((t) => (t.id === taskId || t.dir === taskId ? { ...t, status: targetStatus } : t))
+    );
+    if (selectedTask && (selectedTask.id === taskId || selectedTask.dir === taskId)) {
+      setSelectedTask((prev) => (prev ? { ...prev, status: targetStatus } : null));
+    }
+
+    try {
+      await updateTaskStatus(selectedProject.path, taskDir, targetStatus);
+    } catch (err) {
+      console.error("Failed to update task status:", err);
+      // Revert optimistic update
+      setActiveTasks((prev) =>
+        prev.map((t) => (t.id === taskId || t.dir === taskId ? { ...t, status: originalStatus } : t))
+      );
+      if (selectedTask && (selectedTask.id === taskId || selectedTask.dir === taskId)) {
+        setSelectedTask((prev) => (prev ? { ...prev, status: originalStatus } : null));
+      }
+    }
+  };
+
+  // Toggle subtask completion status
+  const handleToggleSubtask = async (task: TrellisTask, index: number, completed: boolean) => {
+    if (!selectedProject) return;
+    const taskDir = task.dir || task.id;
+    const newStatus = completed ? "completed" : "pending";
+
+    // Optimistically update active and selected tasks
+    const updateSubtasksList = (tasksList: TrellisTask[]) =>
+      tasksList.map((t) => {
+        if (t.id === task.id || t.dir === task.dir) {
+          const updatedSub = (t.subtasks || []).map((s, i) =>
+            i === index ? { ...s, status: newStatus } : s
+          );
+          const completedCount = updatedSub.filter(
+            (s) => s.status === "completed" || s.status === "done"
+          ).length;
+          return {
+            ...t,
+            subtasks: updatedSub,
+            progress: updatedSub.length > 0 ? completedCount / updatedSub.length : t.progress,
+          };
+        }
+        return t;
+      });
+
+    setActiveTasks((prev) => updateSubtasksList(prev));
+    if (selectedTask && (selectedTask.id === task.id || selectedTask.dir === task.dir)) {
+      setSelectedTask((prev) => (prev ? updateSubtasksList([prev])[0] : null));
+    }
+
+    try {
+      await toggleSubtask(selectedProject.path, taskDir, index, completed);
+    } catch (err) {
+      console.error("Failed to toggle subtask on backend:", err);
+      loadTasks(selectedProject.path);
+    }
+  };
+
   // Listen for manual path input
   useEffect(() => {
     const handleManual = async (e: Event) => {
@@ -252,6 +324,7 @@ export const App: React.FC = () => {
             searchQuery={searchQuery}
             priorityFilter={priorityFilter}
             onArchiveTask={handleArchiveTask}
+            onMoveTask={handleMoveTask}
           />
         ) : (
           <div className="flex-1 flex flex-col items-center justify-center text-center p-8 text-gray-500 dark:text-gray-400">
@@ -285,6 +358,7 @@ export const App: React.FC = () => {
           onOpenFolder={(p) => openUrl(p)}
           onOpenInEditor={(p) => openInEditor(p)}
           onArchive={handleArchiveTask}
+          onToggleSubtask={handleToggleSubtask}
         />
       )}
     </div>

@@ -1265,6 +1265,89 @@ fn archive_task(
     Ok(true)
 }
 
+fn resolve_task_json(
+    state: &AppState,
+    project: &str,
+    task: &str,
+) -> Result<PathBuf, String> {
+    if !is_allowed_project(state, project) {
+        return Err("Project not found in scanned directories".into());
+    }
+    let project_dir = expand(project);
+    let task_dir = project_dir.join(".trellis").join("tasks").join(task);
+    if !task_dir.is_dir() {
+        return Err(format!("Task does not exist: {task}"));
+    }
+    let task_json = task_dir.join("task.json");
+    if !task_json.is_file() {
+        return Err(format!("Task is missing task.json: {task}"));
+    }
+    Ok(task_json)
+}
+
+#[tauri::command]
+fn update_task_status(
+    app: AppHandle,
+    state: State<AppState>,
+    project: String,
+    task: String,
+    status: String,
+) -> Result<bool, String> {
+    let task_json = resolve_task_json(&state, &project, &task)?;
+    let content = std::fs::read_to_string(&task_json).map_err(|e| e.to_string())?;
+    let mut val: serde_json::Value = serde_json::from_str(&content).map_err(|e| e.to_string())?;
+
+    val["status"] = serde_json::Value::String(status.clone());
+
+    if status == "completed" || status == "done" {
+        if val.get("completedAt").is_none() || val["completedAt"].is_null() {
+            let now = chrono::Utc::now().to_rfc3339();
+            val["completedAt"] = serde_json::Value::String(now);
+        }
+    }
+
+    let updated = serde_json::to_string_pretty(&val).map_err(|e| e.to_string())?;
+    std::fs::write(&task_json, updated).map_err(|e| e.to_string())?;
+
+    let _ = app.emit("tasks-changed", ());
+    let _ = app.emit("runtime-reconciliation-needed", ());
+    Ok(true)
+}
+
+#[tauri::command]
+fn toggle_subtask(
+    app: AppHandle,
+    state: State<AppState>,
+    project: String,
+    task: String,
+    index: usize,
+    completed: bool,
+) -> Result<bool, String> {
+    let task_json = resolve_task_json(&state, &project, &task)?;
+    let content = std::fs::read_to_string(&task_json).map_err(|e| e.to_string())?;
+    let mut val: serde_json::Value = serde_json::from_str(&content).map_err(|e| e.to_string())?;
+
+    let subtasks = val
+        .get_mut("subtasks")
+        .and_then(|s| s.as_array_mut())
+        .ok_or_else(|| "Task has no subtasks".to_string())?;
+
+    if index >= subtasks.len() {
+        return Err(format!("Subtask index {index} out of bounds"));
+    }
+
+    let subtask = &mut subtasks[index];
+    let new_status = if completed { "completed" } else { "pending" };
+    subtask["status"] = serde_json::Value::String(new_status.to_string());
+
+    let updated = serde_json::to_string_pretty(&val).map_err(|e| e.to_string())?;
+    std::fs::write(&task_json, updated).map_err(|e| e.to_string())?;
+
+    let _ = app.emit("tasks-changed", ());
+    let _ = app.emit("runtime-reconciliation-needed", ());
+    Ok(true)
+}
+
 #[tauri::command]
 fn set_always_on_top(app: AppHandle, state: State<AppState>, flag: bool) -> Result<bool, String> {
     if let Some(window) = app.get_webview_window("main") {
@@ -1505,6 +1588,8 @@ pub fn run() {
             list_specs,
             get_task,
             archive_task,
+            update_task_status,
+            toggle_subtask,
             set_always_on_top,
             set_window_mode,
             set_window_size,

@@ -63,6 +63,7 @@ Tasks automatically map to the four core Trellis lifecycle phases:
 - 🚀 **In Progress** (`status: in_progress`): Tasks currently being executed by AI agents or developers.
 - 🔍 **Verification / Blocked** (`status: blocked` / `check`): Tasks requiring human review, authorization, or blocked on dependencies.
 - ✅ **Done / Archived** (`status: completed` / under `archive/`): Finished deliverables and historical tasks.
+- 🔄 **Drag-and-Drop Column Transitions**: Effortlessly drag cards between workflow columns to update `task.json` instantly with zero LLM/token overhead.
 
 ### 3. Task Cards with Rich Metadata
 - **Priority Indicators**: Visual color-coded tags (`P0` Blocker, `P1` High, `P2` Medium, `P3` Low).
@@ -71,6 +72,7 @@ Tasks automatically map to the four core Trellis lifecycle phases:
 
 ### 4. Interactive Slide-Over Task Detail
 - Click any task card to reveal the complete task metadata without leaving your workspace.
+- **Interactive Checklist**: Click checkboxes to toggle subtasks on/off with optimistic UI updates and immediate progress recalculation.
 - Built-in Markdown renderer (GFM) displaying `prd.md`, `design.md`, `implement.md`, and research notes.
 - Quick action buttons to archive tasks directly, or launch the task directory directly in **Cursor**, **VS Code**, or your system file manager (**Finder** / **File Explorer** / **Nautilus**).
 

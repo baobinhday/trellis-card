@@ -34,7 +34,14 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, onClick, onArchive }) 
   return (
     <div
       onClick={onClick}
-      className="group relative bg-white dark:bg-trellis-darkCard rounded-xl p-3.5 border border-gray-200/80 dark:border-trellis-darkBorder hover:border-indigo-400 dark:hover:border-indigo-500/80 shadow-xs hover:shadow-md transition-all cursor-pointer select-none"
+      draggable={!task.archived}
+      onDragStart={(e) => {
+        e.dataTransfer.setData("text/plain", task.id || task.dir);
+        e.dataTransfer.effectAllowed = "move";
+      }}
+      className={`group relative bg-white dark:bg-trellis-darkCard rounded-xl p-3.5 border border-gray-200/80 dark:border-trellis-darkBorder hover:border-indigo-400 dark:hover:border-indigo-500/80 shadow-xs hover:shadow-md transition-all select-none ${
+        task.archived ? "cursor-pointer" : "cursor-grab active:cursor-grabbing"
+      }`}
     >
       {/* Top Meta: Priority + Slug/Date + Archived tag */}
       <div className="flex items-center justify-between gap-2 mb-2">
