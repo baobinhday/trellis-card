@@ -3,6 +3,7 @@ import { Sidebar } from "./components/Sidebar";
 import { Header } from "./components/Header";
 import { KanbanBoard } from "./components/KanbanBoard";
 import { TaskDetailModal } from "./components/TaskDetailModal";
+import { SpecExplorerModal } from "./components/SpecExplorerModal";
 import { ProjectInfo, TrellisTask } from "./types";
 import {
   listProjects,
@@ -30,6 +31,8 @@ export const App: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [priorityFilter, setPriorityFilter] = useState<string>("ALL");
   const [selectedTask, setSelectedTask] = useState<TrellisTask | null>(null);
+  const [isSpecExplorerOpen, setIsSpecExplorerOpen] = useState<boolean>(false);
+  const [focusedSpecPath, setFocusedSpecPath] = useState<string | null>(null);
   const [darkMode, setDarkMode] = useState<boolean>(() => {
     return (
       localStorage.getItem("trellis_theme") === "dark" ||
@@ -227,6 +230,21 @@ export const App: React.FC = () => {
     }
   };
 
+  // Open Spec Explorer
+  const handleOpenSpec = (specPath?: string) => {
+    setFocusedSpecPath(specPath || null);
+    setIsSpecExplorerOpen(true);
+  };
+
+  // Navigate to task by id/dir (for parent/child relations)
+  const handleSelectTaskById = (taskId: string) => {
+    const allTasks = [...activeTasks, ...archivedTasks];
+    const target = allTasks.find((t) => t.id === taskId || t.dir === taskId);
+    if (target) {
+      setSelectedTask(target);
+    }
+  };
+
   // Listen for manual path input
   useEffect(() => {
     const handleManual = async (e: Event) => {
@@ -315,6 +333,7 @@ export const App: React.FC = () => {
           onRefresh={() => selectedProject && loadTasks(selectedProject.path)}
           isLoading={isLoading}
           isLiveSynced={isLiveSynced}
+          onOpenSpecs={() => handleOpenSpec()}
         />
 
         {selectedProject ? (
@@ -359,6 +378,22 @@ export const App: React.FC = () => {
           onOpenInEditor={(p) => openInEditor(p)}
           onArchive={handleArchiveTask}
           onToggleSubtask={handleToggleSubtask}
+          onSelectTaskById={handleSelectTaskById}
+          onOpenSpec={(spec) => handleOpenSpec(spec)}
+        />
+      )}
+
+      {/* Spec Explorer Modal */}
+      {selectedProject && (
+        <SpecExplorerModal
+          isOpen={isSpecExplorerOpen}
+          projectPath={selectedProject.path}
+          onClose={() => {
+            setIsSpecExplorerOpen(false);
+            setFocusedSpecPath(null);
+          }}
+          onOpenInEditor={(p) => openInEditor(p)}
+          initialSpecPath={focusedSpecPath}
         />
       )}
     </div>

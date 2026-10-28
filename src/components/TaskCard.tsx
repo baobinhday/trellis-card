@@ -4,6 +4,8 @@ import {
   CheckSquare,
   Archive,
   Layers,
+  GitFork,
+  GitBranch,
 } from "lucide-react";
 import { TrellisTask } from "../types";
 
@@ -58,6 +60,26 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, onClick, onArchive }) 
             <span className="text-[10px] text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded flex items-center gap-1 truncate max-w-[100px]">
               <Layers className="w-2.5 h-2.5 flex-shrink-0" />
               <span className="truncate">{task.package}</span>
+            </span>
+          )}
+
+          {task.parent && (
+            <span
+              title={`Parent: ${task.parent}`}
+              className="text-[10px] text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-950/50 px-1.5 py-0.5 rounded border border-purple-200/50 dark:border-purple-900/40 flex items-center gap-0.5 truncate max-w-[100px]"
+            >
+              <GitFork className="w-2.5 h-2.5 flex-shrink-0" />
+              <span className="truncate">{task.parent}</span>
+            </span>
+          )}
+
+          {task.children && task.children.length > 0 && (
+            <span
+              title={`Subtasks: ${task.children.length} child tasks`}
+              className="text-[10px] text-sky-600 dark:text-sky-400 bg-sky-50 dark:bg-sky-950/50 px-1.5 py-0.5 rounded border border-sky-200/50 dark:border-sky-900/40 flex items-center gap-0.5"
+            >
+              <GitBranch className="w-2.5 h-2.5 flex-shrink-0" />
+              <span>{task.children.length}</span>
             </span>
           )}
         </div>

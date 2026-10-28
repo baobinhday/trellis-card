@@ -6,6 +6,7 @@ import {
   Archive,
   Filter,
   RefreshCw,
+  BookOpen,
 } from "lucide-react";
 import { ProjectInfo } from "../types";
 
@@ -23,6 +24,7 @@ interface HeaderProps {
   onRefresh: () => void;
   isLoading: boolean;
   isLiveSynced?: boolean;
+  onOpenSpecs?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -39,6 +41,7 @@ export const Header: React.FC<HeaderProps> = ({
   onRefresh,
   isLoading,
   isLiveSynced = false,
+  onOpenSpecs,
 }) => {
   if (!project) {
     return (
@@ -94,6 +97,16 @@ export const Header: React.FC<HeaderProps> = ({
             <Code className="w-3.5 h-3.5" />
             <span>Editor</span>
           </button>
+          {onOpenSpecs && (
+            <button
+              onClick={onOpenSpecs}
+              title="Open Spec Explorer (.trellis/spec/)"
+              className="flex items-center gap-1.5 px-2.5 py-1 text-xs text-indigo-600 dark:text-indigo-400 bg-indigo-50/70 dark:bg-indigo-950/40 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 rounded-lg border border-indigo-200/60 dark:border-indigo-900/40 transition-colors"
+            >
+              <BookOpen className="w-3.5 h-3.5" />
+              <span>Specs</span>
+            </button>
+          )}
         </div>
       </div>
 

@@ -82,7 +82,11 @@ Tasks automatically map to the four core Trellis lifecycle phases:
 - Filter by priority tier (`All`, `P0`, `P1`, `P2`, `P3`).
 - Toggle visibility for archived historical tasks on demand, with quick archive actions on task cards.
 
-### 6. Dark & Light Theme Support
+### 6. Spec Explorer & Task Relations
+- **Spec Explorer**: Browse and read project guidelines (`.trellis/spec/`) categorized by layer (frontend, tauri, guides) with instant search, line counts, and draft/filled indicators.
+- **Task Relations & Dependencies**: Visualize parent-child relationships and attached spec contracts on task cards and detail modal, with one-click navigation between related tasks and specs.
+
+### 7. Dark & Light Theme Support
 - Clean UI with seamless theme switching (persisted locally across sessions).
 
 ---

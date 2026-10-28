@@ -91,3 +91,41 @@ export interface KanbanColumnDef {
   bgDark: string;
   borderDark: string;
 }
+
+export interface SpecOut {
+  path: string;
+  name: string;
+  category: string;
+  filled: boolean;
+  lineCount: number;
+  referencedBy: number;
+  content: string;
+  paths: string[];
+}
+
+export interface TaskRelation {
+  id: string;
+  dir: string;
+  title: string;
+  status: string;
+  priority?: string;
+  parent?: string;
+  children: string[];
+  specRefs: string[];
+  fileRefs: string[];
+  prdRefs: string[];
+  subtasks: Subtask[];
+  progress: number;
+  archived: boolean;
+}
+
+export interface SpecGroup {
+  spec: string;
+  tasks: string[];
+}
+
+export interface RelationsPayload {
+  tasks: TaskRelation[];
+  specGroups: SpecGroup[];
+  prdGroups: SpecGroup[];
+}

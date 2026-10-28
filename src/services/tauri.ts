@@ -1,4 +1,4 @@
-import { ProjectInfo, TasksPayload, TaskDetail, TrellisTask } from "../types";
+import { ProjectInfo, TasksPayload, TaskDetail, TrellisTask, SpecOut, RelationsPayload } from "../types";
 
 // Check if running inside Tauri webview
 export const isTauri = (): boolean => {
@@ -69,6 +69,16 @@ export async function updateTaskStatus(project: string, task: string, status: st
 // Toggle subtask completion status
 export async function toggleSubtask(project: string, task: string, index: number, completed: boolean): Promise<boolean> {
   return await invokeTauri<boolean>("toggle_subtask", { project, task, index, completed });
+}
+
+// List project specs (.trellis/spec/)
+export async function listSpecs(project: string): Promise<SpecOut[]> {
+  return await invokeTauri<SpecOut[]>("list_specs", { project });
+}
+
+// List task dependencies and relation graphs
+export async function listRelations(project: string): Promise<RelationsPayload> {
+  return await invokeTauri<RelationsPayload>("list_relations", { project });
 }
 
 // Listen to real-time file watcher & hook changes across tasks
@@ -215,6 +225,37 @@ function getMockResponse<T>(cmd: string, args?: Record<string, unknown>): T {
   }
   if (cmd === "add_root" || cmd === "remove_root") {
     return { roots: ["/home/b560/Project/test/trellis-card"] } as unknown as T;
+  }
+  if (cmd === "list_specs") {
+    return [
+      {
+        path: ".trellis/spec/frontend/component-guidelines.md",
+        name: "component-guidelines.md",
+        category: "frontend",
+        filled: true,
+        lineCount: 85,
+        referencedBy: 3,
+        content: "# Frontend Component Guidelines\n\n- Use React with TypeScript\n- Follow Tailwind styling conventions\n- Maintain clean props interfaces",
+        paths: ["src/components/**"],
+      },
+      {
+        path: ".trellis/spec/tauri/ipc-commands.md",
+        name: "ipc-commands.md",
+        category: "tauri",
+        filled: true,
+        lineCount: 120,
+        referencedBy: 4,
+        content: "# Tauri IPC Commands and API Routes\n\n- Define commands in `src-tauri/src/lib.rs`\n- Handle Result<T, String> cleanly\n- Expose wrappers in `src/services/tauri.ts`",
+        paths: ["src-tauri/**"],
+      },
+    ] as unknown as T;
+  }
+  if (cmd === "list_relations") {
+    return {
+      tasks: [],
+      specGroups: [],
+      prdGroups: [],
+    } as unknown as T;
   }
   if (cmd === "archive_task" || cmd === "update_task_status" || cmd === "toggle_subtask") {
     return true as unknown as T;

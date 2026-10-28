@@ -14,6 +14,8 @@ import {
   Archive,
   Copy,
   Check,
+  GitFork,
+  BookOpen,
 } from "lucide-react";
 import { TrellisTask, DocOut } from "../types";
 import { getTask } from "../services/tauri";
@@ -26,6 +28,8 @@ interface TaskDetailModalProps {
   onOpenInEditor: (path: string) => void;
   onArchive?: (task: TrellisTask) => Promise<void> | void;
   onToggleSubtask?: (task: TrellisTask, index: number, completed: boolean) => Promise<void> | void;
+  onSelectTaskById?: (taskId: string) => void;
+  onOpenSpec?: (specPath: string) => void;
 }
 
 export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
@@ -36,6 +40,8 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
   onOpenInEditor,
   onArchive,
   onToggleSubtask,
+  onSelectTaskById,
+  onOpenSpec,
 }) => {
   const [docs, setDocs] = useState<DocOut[]>([]);
   const [activeDocIndex, setActiveDocIndex] = useState(0);
@@ -258,6 +264,66 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
             </div>
           )}
         </div>
+
+        {/* Relations & Attached Specs */}
+        {(task.parent || (task.children && task.children.length > 0) || (task.specRefs && task.specRefs.length > 0)) && (
+          <div className="px-5 py-2.5 bg-indigo-50/30 dark:bg-indigo-950/20 border-b border-gray-200 dark:border-trellis-darkBorder flex flex-wrap items-center gap-3 text-xs flex-shrink-0">
+            {task.parent && (
+              <div className="flex items-center gap-1.5">
+                <span className="text-gray-500 dark:text-gray-400 flex items-center gap-1 font-medium">
+                  <GitFork className="w-3.5 h-3.5 text-purple-500" />
+                  Parent:
+                </span>
+                <button
+                  type="button"
+                  onClick={() => onSelectTaskById?.(task.parent!)}
+                  className="font-mono text-[11px] text-purple-700 dark:text-purple-300 bg-purple-50 dark:bg-purple-950/60 hover:bg-purple-100 dark:hover:bg-purple-900/60 border border-purple-200 dark:border-purple-800/60 rounded px-1.5 py-0.5 transition-colors cursor-pointer"
+                >
+                  {task.parent}
+                </button>
+              </div>
+            )}
+
+            {task.children && task.children.length > 0 && (
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="text-gray-500 dark:text-gray-400 flex items-center gap-1 font-medium">
+                  <GitBranch className="w-3.5 h-3.5 text-sky-500" />
+                  Subtasks:
+                </span>
+                {task.children.map((childId) => (
+                  <button
+                    key={childId}
+                    type="button"
+                    onClick={() => onSelectTaskById?.(childId)}
+                    className="font-mono text-[11px] text-sky-700 dark:text-sky-300 bg-sky-50 dark:bg-sky-950/60 hover:bg-sky-100 dark:hover:bg-sky-900/60 border border-sky-200 dark:border-sky-800/60 rounded px-1.5 py-0.5 transition-colors cursor-pointer"
+                  >
+                    {childId}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {task.specRefs && task.specRefs.length > 0 && (
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="text-gray-500 dark:text-gray-400 flex items-center gap-1 font-medium">
+                  <BookOpen className="w-3.5 h-3.5 text-indigo-500" />
+                  Specs:
+                </span>
+                {task.specRefs.map((spec) => (
+                  <button
+                    key={spec}
+                    type="button"
+                    onClick={() => onOpenSpec?.(spec)}
+                    title="Open in Spec Explorer"
+                    className="font-mono text-[11px] text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 border border-indigo-200 dark:border-indigo-800/60 rounded px-1.5 py-0.5 transition-colors cursor-pointer"
+                  >
+                    {spec.split("/").pop()}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Subtasks Section if present */}
         {subtasks && subtasks.length > 0 && (() => {
