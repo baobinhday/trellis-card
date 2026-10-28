@@ -7,6 +7,7 @@ import {
   Filter,
   RefreshCw,
   BookOpen,
+  ChevronDown,
 } from "lucide-react";
 import { ProjectInfo } from "../types";
 
@@ -125,19 +126,22 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
 
         {/* Priority Filter */}
-        <div className="flex items-center gap-1 bg-gray-100 dark:bg-gray-800/80 rounded-lg px-2 py-1 border border-transparent">
-          <Filter className="w-3 h-3 text-gray-400" />
-          <select
-            value={priorityFilter}
-            onChange={(e) => onPriorityFilterChange(e.target.value)}
-            className="bg-transparent text-xs text-gray-700 dark:text-gray-300 focus:outline-none cursor-pointer"
-          >
-            <option value="ALL">All Priorities</option>
-            <option value="P0">P0 - Blocker</option>
-            <option value="P1">P1 - High</option>
-            <option value="P2">P2 - Medium</option>
-            <option value="P3">P3 - Low</option>
-          </select>
+        <div className="flex items-center gap-1.5 bg-gray-100 dark:bg-gray-800/80 rounded-lg px-2.5 py-1.5 border border-transparent">
+          <Filter className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+          <div className="relative flex items-center">
+            <select
+              value={priorityFilter}
+              onChange={(e) => onPriorityFilterChange(e.target.value)}
+              className="appearance-none bg-transparent pr-4 text-xs font-medium text-gray-700 dark:text-gray-300 focus:outline-none cursor-pointer"
+            >
+              <option value="ALL" className="bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100">All Priorities</option>
+              <option value="P0" className="bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100">P0 - Blocker</option>
+              <option value="P1" className="bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100">P1 - High</option>
+              <option value="P2" className="bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100">P2 - Medium</option>
+              <option value="P3" className="bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100">P3 - Low</option>
+            </select>
+            <ChevronDown className="w-3 h-3 text-gray-400 absolute right-0 pointer-events-none" />
+          </div>
         </div>
 
         {/* Archive Toggle */}
