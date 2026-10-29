@@ -8,6 +8,7 @@ on:
   push:
     tags:
       - "v*"
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -21,12 +22,15 @@ jobs:
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             name: windows-x64
-          - os: macos-latest
+          # macOS Apple Silicon (MacBook Air/Pro M1/M2/M3/M4, macOS 14 Sonoma trở lên)
+          - os: macos-14
             target: aarch64-apple-darwin
             name: macos-arm64
+            deployment_target: "14.0"
           - os: macos-latest
             target: x86_64-apple-darwin
             name: macos-x64
+            deployment_target: "10.13"
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
             name: linux-x64
@@ -84,6 +88,7 @@ jobs:
         env:
           # 未配置签名密钥时不阻塞构建
           TAURI_SIGNING_PRIVATE_KEY: ""
+          MACOSX_DEPLOYMENT_TARGET: ${{ matrix.deployment_target }}
 
       # 上传 bundle 产物到 artifact（release job 汇总用）
       - name: Upload bundle artifacts
@@ -97,6 +102,7 @@ jobs:
   # 汇总所有平台的 bundle，发布为一个 GitHub Release
   release:
     needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     steps:
       - name: Download all bundle artifacts
