@@ -47,6 +47,6 @@ When the user asks what the project is today, or a confirmed capability or archi
 
 ## Reuse and language
 
-Before writing a topic, use `mini-trellis mem recall "<topic>"` if the relevant notes are not already open. Expand needed evidence with `mini-trellis mem read "<ref>"`. Update the existing research/spec section; record the scope and sources, distinguish user confirmation from measured facts and inference, and keep a link when replacing an earlier decision. Journal should briefly describe the work and link to the topic, not repeat its body.
+Before writing a topic, use `lean-trellis mem recall "<topic>"` if the relevant notes are not already open. Expand needed evidence with `lean-trellis mem read "<ref>"`. Update the existing research/spec section; record the scope and sources, distinguish user confirmation from measured facts and inference, and keep a link when replacing an earlier decision. Journal should briefly describe the work and link to the topic, not repeat its body.
 
 Skip ordinary turns and changes that add no reusable knowledge. Write new notes in the user's requested language, otherwise the discussion language; preserve the language of an existing document. Do not translate paths or identifiers. Check the writer's result and report failures; never claim notes were saved after an error. Closing a window or a crash does not guarantee a final write.

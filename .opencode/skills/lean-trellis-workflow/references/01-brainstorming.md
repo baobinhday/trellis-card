@@ -10,7 +10,7 @@ Before asking any questions to the user:
    - Identify existing files implementing similar features.
    - Review configurations, mock data, and unit tests.
 2. Review existing specifications under `.trellis/spec/` or `docs/`.
-3. Run `mini-trellis mem recall "<topic>"` to inspect whether earlier discussions or decisions already addressed this requirement.
+3. Run `lean-trellis mem recall "<topic>"` to inspect whether earlier discussions or decisions already addressed this requirement.
 
 ---
 

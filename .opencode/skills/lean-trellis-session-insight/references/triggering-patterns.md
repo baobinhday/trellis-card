@@ -1,6 +1,6 @@
 # Triggering Patterns
 
-Examples of requests that may need earlier project knowledge. Use `mini-trellis mem` when the current conversation or open files do not already provide the answer.
+Examples of requests that may need earlier project knowledge. Use `lean-trellis mem` when the current conversation or open files do not already provide the answer.
 
 Patterns are grouped by the *intent* behind the phrasing, not the surface words. The same intent shows up in different languages and registers.
 
@@ -17,7 +17,7 @@ The user is asking "how did we (or I) solve this before". Topic notes and past c
 - "之前是怎么搞定 X 的?"
 - "我记得以前修过类似的"
 
-Reach: `mini-trellis mem recall "<symptom keyword or relevant path>"`. Use `mini-trellis mem read "<ref>"` if the excerpt leaves the resolution or its conditions unclear.
+Reach: `lean-trellis mem recall "<symptom keyword or relevant path>"`. Use `lean-trellis mem read "<ref>"` if the excerpt leaves the resolution or its conditions unclear.
 
 ## Decision retrieval
 
@@ -30,7 +30,7 @@ The user is referencing an earlier decision whose rationale may be in project no
 - "关于 X 我们之前是怎么定的?"
 - "之前讨论过 X 的方案吗?"
 
-Reach: `mini-trellis mem recall "<decision keyword>"`. Expand a returned ref only when needed to distinguish a proposal, rejection, or confirmed decision.
+Reach: `lean-trellis mem recall "<decision keyword>"`. Expand a returned ref only when needed to distinguish a proposal, rejection, or confirmed decision.
 
 ## Cross-session continuation
 
@@ -43,7 +43,7 @@ The user resumed work after a gap and the context is implicit.
 - "我们上次做到哪了"
 - "接着昨天那个任务"
 
-Reach: check the active journal and current context first. If earlier details are missing, use `mini-trellis mem recall "<work topic or changed path>"`, then read only the refs needed to resume.
+Reach: check the active journal and current context first. If earlier details are missing, use `lean-trellis mem recall "<work topic or changed path>"`, then read only the refs needed to resume.
 
 ## Familiar-bug debugging
 
@@ -56,7 +56,7 @@ The current bug feels like one already seen. Past sessions probably hold the res
 - "这个 bug 是不是上次那个?"
 - "怎么又是这个 error?"
 
-Reach: `mini-trellis mem recall "<error message fragment>"`. Anchor on a short, distinctive token from the actual error string, and read a ref only if the fix or its conditions need more context.
+Reach: `lean-trellis mem recall "<error message fragment>"`. Anchor on a short, distinctive token from the actual error string, and read a ref only if the fix or its conditions need more context.
 
 ## Self-pattern spotting
 
@@ -69,7 +69,7 @@ The user is asking whether they keep repeating the same kind of mistake or decis
 - "我老犯这个错?"
 - "这类问题之前出现过几次?"
 
-Reach: `mini-trellis mem recall "<topic>"`. Compare the returned examples and their sources; expand only unresolved context. Describe observed examples rather than treating a limited result set as a complete count.
+Reach: `lean-trellis mem recall "<topic>"`. Compare the returned examples and their sources; expand only unresolved context. Describe observed examples rather than treating a limited result set as a complete count.
 
 ## Session retrospective (on demand)
 
@@ -82,7 +82,7 @@ The user explicitly wants to look back at recent work — not as a forced step, 
 - "记一下这次踩的坑"
 - "复盘下这个任务"
 
-Reach: summarize from the current conversation first. If older context is needed, use `mini-trellis mem recall "<work topic>"` and read only the refs that fill a gap. Include source or file:line citations where useful.
+Reach: summarize from the current conversation first. If older context is needed, use `lean-trellis mem recall "<work topic>"` and read only the refs that fill a gap. Include source or file:line citations where useful.
 
 For an explicit recording request or a confirmed reusable decision, follow the host's remember guidance: update an existing spec/research topic, check the saved content, and link it from a brief journal entry. Summarizing alone does not turn unconfirmed ideas into decisions. Respect requests not to record; ordinary edits need no automatic note.
 

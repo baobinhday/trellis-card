@@ -1,6 +1,6 @@
-# `mini-trellis mem` CLI Reference
+# `lean-trellis mem` CLI Reference
 
-Use `recall` for project knowledge and `read` for missing context. Full command help: `mini-trellis mem help`.
+Use `recall` for project knowledge and `read` for missing context. Full command help: `lean-trellis mem help`.
 
 ## Subcommands
 
@@ -34,9 +34,9 @@ Use `recall` for project knowledge and `read` for missing context. Full command 
 | `--json` | all | Machine-readable JSON. |
 
 ```bash
-mini-trellis mem recall "deadlock"
+lean-trellis mem recall "deadlock"
 # Only when the excerpts lack necessary context:
-mini-trellis mem read "<ref copied from recall>"
+lean-trellis mem read "<ref copied from recall>"
 ```
 
 If the excerpts already answer the question with their source and conditions, stop. Keep refs unchanged; if a source has changed, recall again. For an explicit request about another project, pass the same `--cwd "<project path>"` to recall and read.
@@ -44,6 +44,6 @@ If the excerpts already answer the question with their source and conditions, st
 For an explicit conversation-only lookup:
 
 ```bash
-mini-trellis mem search "deadlock"
-mini-trellis mem context <session-id> --grep "lock" --turns 3 --around 1
+lean-trellis mem search "deadlock"
+lean-trellis mem context <session-id> --grep "lock" --turns 3 --around 1
 ```

@@ -528,7 +528,7 @@ def _build_compact_current_state(
     if spec_index_paths:
         lines.append(f"Spec indexes: {len(spec_index_paths)} available.")
 
-    lines.append("Research: use `mini-trellis mem recall <query>` when relevant.")
+    lines.append("Research: use `lean-trellis mem recall <query>` when relevant.")
 
     return "\n".join(lines)
 
@@ -631,9 +631,9 @@ mini-trellis SessionStart context. Orient from journal, spec, and research.
 
     output.write("<guidelines>\n")
     output.write(
-        "Memory: use `mini-trellis mem recall <query>` for prior decisions, rejected "
+        "Memory: use `lean-trellis mem recall <query>` for prior decisions, rejected "
         "approaches, and project rules. If the excerpt answers the question with its "
-        "source and conditions, cite it and stop; use `mini-trellis mem read <ref>` "
+        "source and conditions, cite it and stop; use `lean-trellis mem read <ref>` "
         "only for missing context. Do not repeat a sufficient lookup.\n"
         "Research lives in `.trellis/research/`; durable rules belong in `.trellis/spec/`.\n"
         "Record a confirmed decision, a rejected approach worth not retrying, or a useful "
@@ -645,7 +645,7 @@ mini-trellis SessionStart context. Orient from journal, spec, and research.
     if source == "compact" and platform in {"cursor", "codebuddy"}:
         output.write(
             f"This SessionStart follows compact. {platform.title()} conversation history is not read. "
-            "Use `mini-trellis mem recall <query>` then `mini-trellis mem read <ref>` for project notes. "
+            "Use `lean-trellis mem recall <query>` then `lean-trellis mem read <ref>` for project notes. "
             f"Record durable decisions that were not saved yet with `{remember_command}`.\n"
         )
     elif source == "compact":
@@ -659,22 +659,22 @@ mini-trellis SessionStart context. Orient from journal, spec, and research.
             output.write(
                 "This SessionStart follows compact. Details missing from the summary may "
                 f"still be in local session {session_id}: use "
-                f"`mini-trellis mem context {session_id}{platform_flag}` from this project, or "
-                "`mini-trellis mem recall <query>` then `mini-trellis mem read <ref>`. "
+                f"`lean-trellis mem context {session_id}{platform_flag}` from this project, or "
+                "`lean-trellis mem recall <query>` then `lean-trellis mem read <ref>`. "
                 "Record durable decisions that were not saved yet with "
                 f"`{remember_command}`.\n"
             )
         else:
             output.write(
                 "This SessionStart follows compact. Details missing from the summary may "
-                "still be in local session history: use `mini-trellis mem recall <query>`, "
-                "then `mini-trellis mem read <ref>` for the original turns. Record durable "
+                "still be in local session history: use `lean-trellis mem recall <query>`, "
+                "then `lean-trellis mem read <ref>` for the original turns. Record durable "
                 f"decisions that were not saved yet with `{remember_command}`.\n"
             )
     output.write("</guidelines>\n\n")
 
     output.write("""<ready>
-Context loaded. Use journal, spec, research, and `mini-trellis mem` on demand. Remember at session end or after compact.
+Context loaded. Use journal, spec, research, and `lean-trellis mem` on demand. Remember at session end or after compact.
 </ready>""")
 
     context_text = output.getvalue()

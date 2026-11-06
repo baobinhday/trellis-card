@@ -55,7 +55,7 @@ The user interacts using natural language. The assistant automatically activates
 2. Scaffold `.trellis/research/<slug>/` with `prd.md`, `design.md`, and `implement.md` from templates (or run `scripts/new-feature.sh <slug> "<name>"`).
 3. Recall prior relevant project decisions:
    ```bash
-   mini-trellis mem recall "<feature keywords>"
+   lean-trellis mem recall "<feature keywords>"
    ```
 4. Read relevant specs under `.trellis/spec/` or `docs/`.
 5. Pre-fill known facts and repository constraints into `prd.md`.
@@ -89,3 +89,12 @@ The user interacts using natural language. The assistant automatically activates
      --summary "<Summary of implementation, key decisions, and tests passed>" \
      --topic .trellis/research/<slug>/prd.md
    ```
+
+---
+
+## Detailed References
+- [01-brainstorming.md](references/01-brainstorming.md): Brainstorming, evidence gathering, scope cutting, and interview protocols.
+- [02-technical-design.md](references/02-technical-design.md): Contract definitions, module boundaries, and alternatives considered.
+- [03-execution-guide.md](references/03-execution-guide.md): In-session execution discipline and incremental checklist tracking.
+- [04-verification-remember.md](references/04-verification-remember.md): Acceptance testing, spec promotion, and session recording.
+- [05-deepseek-note-discipline.md](references/05-deepseek-note-discipline.md): Fact/Hypothesis tagging, negative knowledge, and anti-rot principles.

@@ -1,23 +1,23 @@
 ---
 name: lean-trellis-session-insight
-description: "Find project knowledge and past AI conversation history through the `mini-trellis mem` CLI. Use whenever the user asks 'how did we solve X last time', 'have we discussed this before', 'what was the decision on X', '上次怎么解的', '之前讨论过吗', or when continuing work across sessions. Returns source-linked excerpts from project documents and past conversations."
+description: "Find project knowledge and past AI conversation history through the `lean-trellis mem` CLI. Use whenever the user asks 'how did we solve X last time', 'have we discussed this before', 'what was the decision on X', '上次怎么解的', '之前讨论过吗', or when continuing work across sessions. Returns source-linked excerpts from project documents and past conversations."
 ---
 
 # Session Insight
 
-How to call `mini-trellis mem` and when that is the right move. Capability, not a workflow. No required write-back.
+How to call `lean-trellis mem` and when that is the right move. Capability, not a workflow. No required write-back.
 
 ## What it is
 
 A local CLI that searches project Markdown and Claude Code, Codex, OpenCode V1, and Pi conversation logs. OpenCode V2 and CodeBuddy transcripts are not parsed; their saved project Markdown is still searchable. Documents are discovered automatically; no index service or configuration is needed. Nothing is uploaded.
 
 ```bash
-mini-trellis mem recall "<topic or path>"
+lean-trellis mem recall "<topic or path>"
 # Only when the excerpts leave a question unresolved:
-mini-trellis mem read "<ref from recall>" "<another ref>"
+lean-trellis mem read "<ref from recall>" "<another ref>"
 ```
 
-Full flags: `mini-trellis mem help`.
+Full flags: `lean-trellis mem help`.
 
 ## When
 
