@@ -224,7 +224,7 @@ function buildCompactCurrentState(ctx, specIndexPaths) {
     lines.push(`Spec indexes: ${specIndexPaths.length} available.`)
   }
 
-  lines.push("Research: use `mini-trellis mem recall <query>` when relevant.")
+  lines.push("Research: use `lean-trellis mem recall <query>` when relevant.")
 
   return lines.join("\n")
 }
@@ -242,7 +242,7 @@ export function buildSessionContext(ctx, platformInput = null) {
   const parts = []
 
   parts.push(`<session-context>
-mini-trellis SessionStart context. Orient from journal, spec, and research.
+lean-trellis SessionStart context. Orient from journal, spec, and research.
 </session-context>`)
 
   const legacyWarning = checkLegacySpec(directory, config)
@@ -256,13 +256,13 @@ mini-trellis SessionStart context. Orient from journal, spec, and research.
 
   parts.push("<guidelines>")
   parts.push(
-    "Memory: use `mini-trellis mem recall <query>` for prior decisions, rejected " +
+    "Memory: use `lean-trellis mem recall <query>` for prior decisions, rejected " +
     "approaches, and project rules. If the excerpt answers the question with its " +
-    "source and conditions, cite it and stop; use `mini-trellis mem read <ref>` " +
+    "source and conditions, cite it and stop; use `lean-trellis mem read <ref>` " +
     "only for missing context. Do not repeat a sufficient lookup.\n" +
     "Research lives in `.trellis/research/`; durable rules belong in `.trellis/spec/`.\n" +
     "Record a confirmed decision, a rejected approach worth not retrying, or a useful " +
-    "handoff with `/mini-trellis:remember` or `python3 ./.trellis/scripts/add_session.py`. " +
+    "handoff with `/lean-trellis:remember` or `python3 ./.trellis/scripts/add_session.py`. " +
     "Do not record every turn, and do not create a git commit unless the user asks.\n"
   )
 
@@ -270,14 +270,14 @@ mini-trellis SessionStart context. Orient from journal, spec, and research.
   parts.push("</guidelines>")
 
   parts.push(`<ready>
-Context loaded. Use journal, spec, research, and \`mini-trellis mem\` on demand. Remember at session end or after compact.
+Context loaded. Use journal, spec, research, and \`lean-trellis mem\` on demand. Remember at session end or after compact.
 </ready>`)
 
   const context = parts.join("\n\n")
   if (context.length <= MAX_CONTEXT_CHARS) return context
   const tail = context.slice(-300)
   return context.slice(0, MAX_CONTEXT_CHARS - tail.length - 80) +
-    "\n[mini-trellis context truncated; read files on demand]\n" + tail
+    "\n[lean-trellis context truncated; read files on demand]\n" + tail
 }
 
 function getTrellisMetadata(metadata) {

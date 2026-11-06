@@ -139,7 +139,7 @@ export function prependEphemeralText(messages, text) {
     const message = messages[i]
     if (!Array.isArray(message?.parts)) continue
     const parts = message.parts.filter(part => !(part?.synthetic === true &&
-      typeof part.text === "string" && part.text.startsWith("<session-context>\nmini-trellis SessionStart context.")))
+      typeof part.text === "string" && part.text.startsWith("<session-context>\nlean-trellis SessionStart context.")))
     if (parts.length !== message.parts.length) messages[i] = { ...message, parts }
   }
   const original = messages[index]

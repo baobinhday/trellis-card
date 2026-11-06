@@ -552,7 +552,7 @@ def _write_runtime_status(trellis_dir: Path, platform: str | None, status: str, 
         finally:
             temp.unlink(missing_ok=True)
     except (OSError, TypeError, ValueError):
-        print("mini-trellis: hook diagnostic write failed (state-write)", file=sys.stderr)
+        print("lean-trellis: hook diagnostic write failed (state-write)", file=sys.stderr)
 
 
 def _main_impl():
@@ -615,7 +615,7 @@ def _main_impl():
         remember_command = "lean-trellis-remember"
 
     output.write("""<session-context>
-mini-trellis SessionStart context. Orient from journal, spec, and research.
+lean-trellis SessionStart context. Orient from journal, spec, and research.
 </session-context>
 
 """)
@@ -682,7 +682,7 @@ Context loaded. Use journal, spec, research, and `lean-trellis mem` on demand. R
         tail = context_text[-300:]
         context_text = (
             context_text[: MAX_CONTEXT_CHARS - len(tail) - 80]
-            + "\n[mini-trellis context truncated; read files on demand]\n"
+            + "\n[lean-trellis context truncated; read files on demand]\n"
             + tail
         )
 
@@ -759,5 +759,5 @@ if __name__ == "__main__":
                 project_path / ".trellis" if project_path else Path(".trellis"),
                 _detect_platform({}), "error", error_category=type(exc).__name__,
             )
-        print(f"mini-trellis SessionStart failed: {type(exc).__name__}", file=sys.stderr)
+        print(f"lean-trellis SessionStart failed: {type(exc).__name__}", file=sys.stderr)
         raise

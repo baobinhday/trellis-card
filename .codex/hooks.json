@@ -8,7 +8,7 @@
             "type": "command",
             "command": "python3 -X utf8 .codex/hooks/session-start.py",
             "timeout": 30,
-            "statusMessage": "Loading mini-trellis context",
+            "statusMessage": "Loading Lean Trellis context",
             "additionalContextLimit": 2500
           }
         ]
