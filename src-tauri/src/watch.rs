@@ -18,18 +18,28 @@ pub fn is_relevant_task_event(path: &Path) -> bool {
         .collect();
     let Some(index) = comps
         .windows(3)
-        .position(|parts| parts[0] == ".trellis" && parts[1] == "tasks" && !parts[2].is_empty())
+        .position(|parts| parts[0] == ".trellis" && (parts[1] == "tasks" || parts[1] == "research") && !parts[2].is_empty())
     else {
         return false;
     };
-    let rest = if comps[index + 2] == "archive" {
-        if comps.len() <= index + 4 {
+    let is_research_root = comps[index + 1] == "research";
+    let after_category = &comps[index + 2..];
+    if after_category.is_empty() {
+        return false;
+    }
+
+    let rest = if after_category[0] == "archive" {
+        if after_category.len() >= 4 && after_category[1].chars().all(|c| c.is_ascii_digit() || c == '-') {
+            &after_category[3..]
+        } else if after_category.len() >= 3 {
+            &after_category[2..]
+        } else {
             return false;
         }
-        &comps[index + 4..]
     } else {
-        &comps[index + 3..]
+        &after_category[1..]
     };
+
     if rest.len() == 1 {
         let file = rest[0].as_str();
         return matches!(
@@ -40,7 +50,8 @@ pub fn is_relevant_task_event(path: &Path) -> bool {
                 | "implement.md"
                 | "implement.jsonl"
                 | "check.jsonl"
-        ) || (file.starts_with("acceptance-report-") && file.ends_with(".md"));
+        ) || (file.starts_with("acceptance-report-") && file.ends_with(".md"))
+          || (is_research_root && file.ends_with(".md"));
     }
     rest.len() == 2 && rest[0] == "research" && rest[1].ends_with(".md")
 }
@@ -174,5 +185,28 @@ mod tests {
             "/x/proj/.trellis/tasks/01-a"
         )));
         assert!(!is_relevant_task_event(Path::new("/x/proj/task.json")));
+
+        // Lean Trellis tasks (.trellis/research/<slug>/...)
+        assert!(is_relevant_task_event(Path::new(
+            "/x/proj/.trellis/research/support-lean/implement.md"
+        )));
+        assert!(is_relevant_task_event(Path::new(
+            "/x/proj/.trellis/research/support-lean/prd.md"
+        )));
+        assert!(is_relevant_task_event(Path::new(
+            "/x/proj/.trellis/research/support-lean/notes.md"
+        )));
+        assert!(is_relevant_task_event(Path::new(
+            "/x/proj/.trellis/research/archive/2026-10/old-feature/prd.md"
+        )));
+        assert!(is_relevant_task_event(Path::new(
+            "/x/proj/.trellis/tasks/archive/2026-08/01-a/task.json"
+        )));
+        assert!(!is_relevant_task_event(Path::new(
+            "/x/proj/.trellis/research/README.md"
+        )));
+        assert!(!is_relevant_task_event(Path::new(
+            "/x/proj/.trellis/research/support-lean"
+        )));
     }
 }

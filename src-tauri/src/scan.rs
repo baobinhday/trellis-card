@@ -461,7 +461,8 @@ pub fn discover_projects(root: &Path, max_depth: usize) -> Vec<PathBuf> {
             Ok(e) => e,
             Err(_) => continue,
         };
-        if is_directory(&dir.join(".trellis").join("tasks")) {
+        let trellis_dir = dir.join(".trellis");
+        if is_directory(&trellis_dir.join("tasks")) || is_directory(&trellis_dir.join("research")) {
             found.push(dir);
         }
         for e in entries.flatten() {
@@ -687,13 +688,15 @@ pub fn scan_tasks_with_archived(project_dir: &Path) -> (Vec<Task>, Vec<String>) 
 // 避免常规轮询每次都扫 archive/ 拖慢全项目扫描）。version 语义由调用方单独计算。
 pub fn scan_archived(project_dir: &Path) -> (Vec<Task>, Vec<String>) {
     let tasks_dir = project_dir.join(".trellis").join("tasks");
+    let research_dir = project_dir.join(".trellis").join("research");
     let mut tasks = Vec::new();
     let mut errors = Vec::new();
+    let sessions = scan_sessions(project_dir);
+    let dev_workflow = read_developer_workflow(project_dir);
+    let config_workflow = read_config_default_workflow(project_dir);
+
     let archive_dir = tasks_dir.join("archive");
     if is_directory(&archive_dir) {
-        let sessions = scan_sessions(project_dir);
-        let dev_workflow = read_developer_workflow(project_dir);
-        let config_workflow = read_config_default_workflow(project_dir);
         scan_archived_dir(
             &tasks_dir,
             &archive_dir,
@@ -704,6 +707,20 @@ pub fn scan_archived(project_dir: &Path) -> (Vec<Task>, Vec<String>) {
             &mut errors,
         );
     }
+
+    let lean_archive = research_dir.join("archive");
+    if is_directory(&lean_archive) {
+        scan_lean_archived_dir(
+            &research_dir,
+            &lean_archive,
+            &sessions,
+            dev_workflow.as_deref(),
+            config_workflow.as_deref(),
+            &mut tasks,
+            &mut errors,
+        );
+    }
+
     tasks.sort_by(|a, b| {
         a.created_at
             .clone()
@@ -716,59 +733,104 @@ pub fn scan_archived(project_dir: &Path) -> (Vec<Task>, Vec<String>) {
 
 fn scan_tasks_inner(project_dir: &Path, include_archived: bool) -> (Vec<Task>, Vec<String>) {
     let tasks_dir = project_dir.join(".trellis").join("tasks");
+    let research_dir = project_dir.join(".trellis").join("research");
     let mut tasks = Vec::new();
     let mut errors = Vec::new();
-    if !is_directory(&tasks_dir) {
+    if !is_directory(&tasks_dir) && !is_directory(&research_dir) {
         return (tasks, errors);
     }
     let sessions = scan_sessions(project_dir);
     let dev_workflow = read_developer_workflow(project_dir);
     let config_workflow = read_config_default_workflow(project_dir);
-    let entries = match fs::read_dir(&tasks_dir) {
-        Ok(e) => e,
-        Err(err) => {
-            errors.push(format!("Cannot read {}: {}", tasks_dir.display(), err));
-            return (tasks, errors);
+
+    if is_directory(&tasks_dir) {
+        let entries = match fs::read_dir(&tasks_dir) {
+            Ok(e) => e,
+            Err(err) => {
+                errors.push(format!("Cannot read {}: {}", tasks_dir.display(), err));
+                return (tasks, errors);
+            }
+        };
+        for e in entries.flatten() {
+            let dir_name = e.file_name().to_string_lossy().into_owned();
+            let task_path = e.path();
+            /* archive/ 目录：默认跳过；include_archived 时递归扫描其中的任务 */
+            if dir_name == "archive" {
+                if include_archived {
+                    scan_archived_dir(
+                        &tasks_dir,
+                        &task_path,
+                        &sessions,
+                        dev_workflow.as_deref(),
+                        config_workflow.as_deref(),
+                        &mut tasks,
+                        &mut errors,
+                    );
+                }
+                continue;
+            }
+            if !task_path.is_dir() || dir_name.starts_with('.') {
+                continue;
+            }
+            /* 过滤 Trellis 初始化自带的 Bootstrap Guidelines 引导任务：目录名以
+            bootstrap-guidelines 结尾（00-bootstrap-guidelines），对观察无意义。 */
+            if is_bootstrap_guidelines(&dir_name) {
+                continue;
+            }
+            scan_task_dir(
+                &dir_name,
+                &dir_name,
+                false,
+                &task_path,
+                &sessions,
+                dev_workflow.as_deref(),
+                config_workflow.as_deref(),
+                &mut tasks,
+                &mut errors,
+            );
         }
-    };
-    for e in entries.flatten() {
-        let dir_name = e.file_name().to_string_lossy().into_owned();
-        let task_path = e.path();
-        /* archive/ 目录：默认跳过；include_archived 时递归扫描其中的任务 */
-        if dir_name == "archive" {
-            if include_archived {
-                scan_archived_dir(
-                    &tasks_dir,
+    }
+
+    if is_directory(&research_dir) {
+        if let Ok(entries) = fs::read_dir(&research_dir) {
+            for e in entries.flatten() {
+                let dir_name = e.file_name().to_string_lossy().into_owned();
+                let task_path = e.path();
+                if dir_name == "archive" {
+                    if include_archived {
+                        scan_lean_archived_dir(
+                            &research_dir,
+                            &task_path,
+                            &sessions,
+                            dev_workflow.as_deref(),
+                            config_workflow.as_deref(),
+                            &mut tasks,
+                            &mut errors,
+                        );
+                    }
+                    continue;
+                }
+                if !task_path.is_dir() || dir_name.starts_with('.') {
+                    continue;
+                }
+                if !is_lean_task_dir(&task_path) {
+                    continue;
+                }
+                let rel_dir = format!("research/{}", dir_name);
+                scan_lean_task_dir(
+                    &dir_name,
+                    &rel_dir,
+                    false,
                     &task_path,
                     &sessions,
                     dev_workflow.as_deref(),
                     config_workflow.as_deref(),
                     &mut tasks,
-                    &mut errors,
                 );
             }
-            continue;
         }
-        if !task_path.is_dir() || dir_name.starts_with('.') {
-            continue;
-        }
-        /* 过滤 Trellis 初始化自带的 Bootstrap Guidelines 引导任务：目录名以
-        bootstrap-guidelines 结尾（00-bootstrap-guidelines），对观察无意义。 */
-        if is_bootstrap_guidelines(&dir_name) {
-            continue;
-        }
-        scan_task_dir(
-            &dir_name,
-            &dir_name,
-            false,
-            &task_path,
-            &sessions,
-            dev_workflow.as_deref(),
-            config_workflow.as_deref(),
-            &mut tasks,
-            &mut errors,
-        );
     }
+
     tasks.sort_by(|a, b| {
         a.created_at
             .clone()
@@ -917,6 +979,364 @@ fn scan_task_dir(
             config_default_workflow,
         },
     ));
+}
+
+fn is_lean_task_dir(path: &Path) -> bool {
+    path.is_dir()
+        && (path.join("prd.md").is_file()
+            || path.join("design.md").is_file()
+            || path.join("implement.md").is_file())
+}
+
+pub fn parse_lean_title(task_path: &Path, dir_name: &str) -> String {
+    let prd_path = task_path.join("prd.md");
+    if let Ok(content) = fs::read_to_string(&prd_path) {
+        let mut lines = content.lines();
+        if let Some(first) = lines.next() {
+            if first.trim() == "---" {
+                for line in lines.by_ref() {
+                    let trimmed = line.trim();
+                    if trimmed == "---" {
+                        break;
+                    }
+                    if let Some(val) = trimmed.strip_prefix("title:") {
+                        let t = val.trim().trim_matches('\'').trim_matches('"').trim();
+                        if !t.is_empty() {
+                            return t.to_string();
+                        }
+                    }
+                }
+            }
+        }
+        for line in content.lines() {
+            let trimmed = line.trim();
+            if let Some(rest) = trimmed.strip_prefix('#') {
+                if !rest.starts_with('#') {
+                    let mut heading = rest.trim();
+                    if let Some(stripped) = heading.strip_prefix("PRD:") {
+                        heading = stripped.trim();
+                    } else if let Some(stripped) = heading.strip_prefix("PRD") {
+                        heading = stripped.trim_start_matches(':').trim();
+                    }
+                    if !heading.is_empty() {
+                        return heading.to_string();
+                    }
+                }
+            }
+        }
+    }
+    for doc in &["design.md", "implement.md"] {
+        if let Ok(content) = fs::read_to_string(task_path.join(doc)) {
+            for line in content.lines() {
+                let trimmed = line.trim();
+                if let Some(rest) = trimmed.strip_prefix('#') {
+                    if !rest.starts_with('#') {
+                        let mut heading = rest.trim();
+                        if let Some(stripped) = heading.strip_prefix("Technical Design:") {
+                            heading = stripped.trim();
+                        } else if let Some(stripped) = heading.strip_prefix("Implementation Plan:") {
+                            heading = stripped.trim();
+                        }
+                        if !heading.is_empty() {
+                            return heading.to_string();
+                        }
+                    }
+                }
+            }
+        }
+    }
+    humanize_slug(dir_name)
+}
+
+fn humanize_slug(slug: &str) -> String {
+    slug.split(['-', '_'])
+        .filter(|part| !part.is_empty())
+        .map(|part| {
+            let mut chars = part.chars();
+            match chars.next() {
+                None => String::new(),
+                Some(first) => first.to_uppercase().chain(chars).collect(),
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+fn strip_markdown_formatting(s: &str) -> String {
+    let mut t = s.trim();
+    if t.starts_with("**") && t.ends_with("**") && t.len() >= 4 {
+        t = &t[2..t.len() - 2];
+    }
+    t.trim().to_string()
+}
+
+pub fn parse_lean_subtasks_and_status(
+    task_path: &Path,
+    archived: bool,
+) -> (Vec<Subtask>, String, f64, u8, &'static str, Option<String>) {
+    let mut subtasks = Vec::new();
+    let mut created_at = None;
+    let mut explicit_status: Option<String> = None;
+
+    if let Ok(prd_content) = fs::read_to_string(task_path.join("prd.md")) {
+        for line in prd_content.lines() {
+            let trimmed = line.trim();
+            let clean = trimmed.trim_matches('*').trim();
+            if let Some(rest) = clean.strip_prefix("Date:") {
+                let val = rest.trim().trim_matches('*').trim();
+                if !val.is_empty() {
+                    created_at = Some(val.to_string());
+                }
+            } else if let Some(rest) = clean.strip_prefix("Created At:") {
+                let val = rest.trim().trim_matches('*').trim();
+                if !val.is_empty() {
+                    created_at = Some(val.to_string());
+                }
+            }
+            if let Some(rest) = clean.strip_prefix("Status:") {
+                let val = rest.trim().trim_matches('*').trim().to_lowercase();
+                if val.contains("in_progress") || val.contains("in progress") {
+                    explicit_status = Some("in_progress".to_string());
+                } else if val.contains("review") {
+                    explicit_status = Some("review".to_string());
+                } else if val.contains("blocked") {
+                    explicit_status = Some("blocked".to_string());
+                } else if val.contains("approved")
+                    || val.contains("completed")
+                    || val.contains("done")
+                {
+                    explicit_status = Some("done".to_string());
+                }
+            }
+        }
+    }
+
+    let impl_path = task_path.join("implement.md");
+    if let Ok(content) = fs::read_to_string(&impl_path) {
+        for line in content.lines() {
+            let trimmed = line.trim();
+            let (is_checked, is_unchecked, rest) = if let Some(r) = trimmed
+                .strip_prefix("- [x] ")
+                .or_else(|| trimmed.strip_prefix("- [X] "))
+                .or_else(|| trimmed.strip_prefix("* [x] "))
+                .or_else(|| trimmed.strip_prefix("* [X] "))
+            {
+                (true, false, r)
+            } else if let Some(r) = trimmed
+                .strip_prefix("- [ ] ")
+                .or_else(|| trimmed.strip_prefix("* [ ] "))
+            {
+                (false, true, r)
+            } else {
+                (false, false, "")
+            };
+
+            if is_checked {
+                let clean_name = strip_markdown_formatting(rest.trim());
+                if !clean_name.is_empty() {
+                    subtasks.push(Subtask {
+                        name: clean_name,
+                        status: Some("done".to_string()),
+                    });
+                }
+            } else if is_unchecked {
+                let clean_name = strip_markdown_formatting(rest.trim());
+                if !clean_name.is_empty() {
+                    subtasks.push(Subtask {
+                        name: clean_name,
+                        status: Some("pending".to_string()),
+                    });
+                }
+            }
+        }
+    }
+
+    let total = subtasks.len();
+    let done_count = subtasks
+        .iter()
+        .filter(|s| s.status.as_deref() == Some("done"))
+        .count();
+
+    let (status, progress) = if archived {
+        let prog = if total > 0 {
+            done_count as f64 / total as f64
+        } else {
+            1.0
+        };
+        ("done".to_string(), prog)
+    } else if total > 0 && done_count == total {
+        ("done".to_string(), 1.0)
+    } else if done_count > 0 {
+        ("in_progress".to_string(), done_count as f64 / total as f64)
+    } else if let Some(ref exp) = explicit_status {
+        let prog = match exp.as_str() {
+            "done" => 1.0,
+            "review" => 0.85,
+            "in_progress" => 0.5,
+            _ => 0.1,
+        };
+        (exp.clone(), prog)
+    } else {
+        ("planning".to_string(), 0.1)
+    };
+
+    let (lane, kind) = crate::progress::lane_model(&status);
+    (subtasks, status, progress, lane, kind, created_at)
+}
+
+fn scan_lean_artifacts(task_path: &Path) -> Artifacts {
+    let prd = task_path.join("prd.md").is_file();
+    let design = task_path.join("design.md").is_file();
+    let implement = task_path.join("implement.md").is_file();
+    let mut research_count = 0;
+    let mut report_count = 0;
+    if let Ok(entries) = fs::read_dir(task_path) {
+        for e in entries.flatten() {
+            let name = e.file_name().to_string_lossy().into_owned();
+            if e.path().is_file() {
+                if name.starts_with("acceptance-report-") && name.ends_with(".md") {
+                    report_count += 1;
+                }
+            } else if e.path().is_dir() && name == "research" {
+                if let Ok(sub) = fs::read_dir(e.path()) {
+                    research_count += sub.flatten().filter(|se| se.path().is_file()).count();
+                }
+            }
+        }
+    }
+    Artifacts {
+        prd,
+        design,
+        implement,
+        research_count,
+        impl_entries: 0,
+        check_entries: 0,
+        report_count,
+    }
+}
+
+fn lean_task_mtime(task_path: &Path) -> i64 {
+    let mut max_m = mtime_ms(task_path);
+    if let Ok(entries) = fs::read_dir(task_path) {
+        for e in entries.flatten() {
+            let p = e.path();
+            if p.is_file() {
+                max_m = max_m.max(mtime_ms(&p));
+            }
+        }
+    }
+    max_m
+}
+
+fn scan_lean_task_dir(
+    dir_name: &str,
+    rel_dir: &str,
+    archived: bool,
+    task_path: &Path,
+    sessions: &std::collections::HashMap<String, Vec<SessionInfo>>,
+    developer_workflow: Option<&str>,
+    config_default_workflow: Option<&str>,
+    tasks: &mut Vec<Task>,
+) {
+    let title = parse_lean_title(task_path, dir_name);
+    let (subtasks, status, progress, lane, kind, created_at) =
+        parse_lean_subtasks_and_status(task_path, archived);
+    let artifacts = scan_lean_artifacts(task_path);
+    let excerpt = prd_excerpt(&task_path.join("prd.md"), 400);
+    let mtime = lean_task_mtime(task_path);
+    let task_sessions = if archived {
+        Vec::new()
+    } else {
+        sessions.get(dir_name).cloned().unwrap_or_default()
+    };
+    let phase = infer_phase(&status, &artifacts);
+    let workflow = resolve_task_workflow(None, developer_workflow, config_default_workflow);
+
+    tasks.push(Task {
+        id: dir_name.to_string(),
+        title,
+        description: String::new(),
+        status: status.clone(),
+        priority: "P2".to_string(),
+        dev_type: None,
+        scope: None,
+        package: None,
+        branch: None,
+        parent: None,
+        children: Vec::new(),
+        subtasks,
+        created_at,
+        completed_at: if status == "done" {
+            Some("completed".to_string())
+        } else {
+            None
+        },
+        mtime,
+        progress,
+        stage: crate::progress::growth_stage(&status).to_string(),
+        lane,
+        partial: progress,
+        kind: kind.to_string(),
+        archived,
+        sessions: task_sessions,
+        excerpt,
+        artifacts,
+        spec_refs: Vec::new(),
+        file_refs: Vec::new(),
+        prd_refs: Vec::new(),
+        phase,
+        dir: rel_dir.to_string(),
+        workflow,
+    });
+}
+
+fn scan_lean_archived_dir(
+    research_dir: &Path,
+    archive_dir: &Path,
+    sessions: &std::collections::HashMap<String, Vec<SessionInfo>>,
+    developer_workflow: Option<&str>,
+    config_default_workflow: Option<&str>,
+    tasks: &mut Vec<Task>,
+    errors: &mut Vec<String>,
+) {
+    let entries = match fs::read_dir(archive_dir) {
+        Ok(e) => e,
+        Err(err) => {
+            errors.push(format!("Cannot read {}: {}", archive_dir.display(), err));
+            return;
+        }
+    };
+    for e in entries.flatten() {
+        let dir_name = e.file_name().to_string_lossy().into_owned();
+        let path = e.path();
+        if !path.is_dir() || dir_name.starts_with('.') {
+            continue;
+        }
+        if is_lean_task_dir(&path) {
+            let rel = relative_to(research_dir, &path);
+            let rel_dir = format!("research/{}", rel);
+            scan_lean_task_dir(
+                &dir_name,
+                &rel_dir,
+                true,
+                &path,
+                sessions,
+                developer_workflow,
+                config_default_workflow,
+                tasks,
+            );
+        } else {
+            scan_lean_archived_dir(
+                research_dir,
+                &path,
+                sessions,
+                developer_workflow,
+                config_default_workflow,
+                tasks,
+                errors,
+            );
+        }
+    }
 }
 
 pub fn project_info(project_dir: &Path) -> ProjectInfo {
@@ -1500,5 +1920,95 @@ paths: [src/index.ts, 'test/*.test.js', "docs/**"]
             resolve_task_workflow(Some("../escape"), Some("dev-valid"), None),
             Some("dev-valid".to_string())
         );
+    }
+
+    #[test]
+    fn lean_trellis_parsing_and_lane_mapping() {
+        let root = std::env::temp_dir().join(format!("trellis-card-lean-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        let task_dir = root.join(".trellis/research/my-feature");
+        fs::create_dir_all(&task_dir).unwrap();
+
+        fs::write(
+            task_dir.join("prd.md"),
+            "# PRD: My Awesome Feature\n\n**Status:** In Progress\n**Date:** 2026-11-06\n\nThis is a cool feature.",
+        )
+        .unwrap();
+
+        fs::write(
+            task_dir.join("implement.md"),
+            "# Implementation Plan: My Awesome Feature\n\n- [x] Step 1: Init\n- [ ] Step 2: Test\n",
+        )
+        .unwrap();
+
+        let (tasks, errors) = scan_tasks(&root);
+        assert!(errors.is_empty());
+        assert_eq!(tasks.len(), 1);
+        let t = &tasks[0];
+        assert_eq!(t.id, "my-feature");
+        assert_eq!(t.title, "My Awesome Feature");
+        assert_eq!(t.dir, "research/my-feature");
+        assert_eq!(t.subtasks.len(), 2);
+        assert_eq!(t.subtasks[0].name, "Step 1: Init");
+        assert_eq!(t.subtasks[0].status.as_deref(), Some("done"));
+        assert_eq!(t.subtasks[1].name, "Step 2: Test");
+        assert_eq!(t.subtasks[1].status.as_deref(), Some("pending"));
+        assert_eq!(t.progress, 0.5);
+        assert_eq!(t.lane, 1); // Lane 1: work / in_progress
+        assert_eq!(t.status, "in_progress");
+        assert_eq!(t.created_at.as_deref(), Some("2026-11-06"));
+
+        // Test completed: all checked
+        fs::write(
+            task_dir.join("implement.md"),
+            "- [x] Step 1: Init\n- [x] Step 2: Test\n",
+        )
+        .unwrap();
+        let (tasks, _) = scan_tasks(&root);
+        assert_eq!(tasks[0].status, "done");
+        assert_eq!(tasks[0].lane, 3); // Lane 3: done
+        assert_eq!(tasks[0].progress, 1.0);
+
+        // Test archived lean task
+        let archive_task = root.join(".trellis/research/archive/2026-10/old-feature");
+        fs::create_dir_all(&archive_task).unwrap();
+        fs::write(archive_task.join("prd.md"), "# Old Feature\n").unwrap();
+        let (archived, _) = scan_archived(&root);
+        assert_eq!(archived.len(), 1);
+        assert_eq!(archived[0].id, "old-feature");
+        assert_eq!(archived[0].dir, "research/archive/2026-10/old-feature");
+        assert!(archived[0].archived);
+        assert_eq!(archived[0].lane, 3);
+
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn discover_recognizes_lean_research_dir() {
+        let root = std::env::temp_dir().join(format!("trellis-card-disc-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        let proj = root.join("my-lean-proj");
+        fs::create_dir_all(proj.join(".trellis/research")).unwrap();
+
+        let found = discover_projects(&root, 3);
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0], proj);
+
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn scans_current_repo_lean_tasks() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
+        let (tasks, errors) = scan_tasks(root);
+        assert!(errors.is_empty(), "Errors: {:?}", errors);
+        let support = tasks.iter().find(|t| t.id == "support-lean-trellis");
+        assert!(
+            support.is_some(),
+            "support-lean-trellis should be discovered in current repo"
+        );
+        let task = support.unwrap();
+        assert_eq!(task.title, "Support Lean Trellis in Trellis Card");
+        assert!(task.subtasks.len() > 0);
     }
 }

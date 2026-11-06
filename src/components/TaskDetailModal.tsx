@@ -98,7 +98,12 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
   const handleCopyDir = async () => {
     if (!task) return;
     try {
-      await navigator.clipboard.writeText(task.dir || task.id);
+      const copyVal = task.dir
+        ? (task.dir.startsWith("research/") || task.dir.startsWith("research\\")
+            ? `.trellis/${task.dir}`
+            : `.trellis/tasks/${task.dir}`)
+        : task.id;
+      await navigator.clipboard.writeText(copyVal);
       setCopiedDir(true);
       setTimeout(() => setCopiedDir(false), 2000);
     } catch (err) {
@@ -133,7 +138,10 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
 
   if (!task) return null;
 
-  const taskFullPath = `${projectPath}/.trellis/tasks/${task.archived ? `archive/*/${task.dir}` : task.dir}`;
+  const isResearch = task.dir.startsWith("research/") || task.dir.startsWith("research\\");
+  const taskFullPath = isResearch
+    ? `${projectPath}/.trellis/${task.dir}`
+    : `${projectPath}/.trellis/tasks/${task.archived && !task.dir.startsWith("archive/") ? `archive/*/${task.dir}` : task.dir}`;
 
   return (
     <div className="fixed inset-0 z-50 overflow-hidden bg-black/40 backdrop-blur-xs flex justify-end transition-opacity">

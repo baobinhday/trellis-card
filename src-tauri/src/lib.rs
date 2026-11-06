@@ -1157,7 +1157,12 @@ fn get_task(state: State<AppState>, project: String, id: String) -> Result<TaskD
         .into_iter()
         .find(|t| t.id == id || t.dir == id)
         .ok_or_else(|| "Task does not exist".to_string())?;
-    let docs = collect_docs(&project_dir.join(".trellis").join("tasks").join(&task.dir));
+    let task_full_dir = if task.dir.starts_with("research/") || task.dir.starts_with("research\\") {
+        project_dir.join(".trellis").join(&task.dir)
+    } else {
+        project_dir.join(".trellis").join("tasks").join(&task.dir)
+    };
+    let docs = collect_docs(&task_full_dir);
     Ok(TaskDetail { task, docs })
 }
 
@@ -1635,6 +1640,25 @@ mod tests {
         );
         assert_eq!(docs[0].content, "prd");
         assert_eq!(docs[3].name, "research/竞品.md");
+
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn collect_docs_for_lean_trellis_research_directory() {
+        let dir = std::env::temp_dir().join(format!("trellis-card-lean-docs-{}", std::process::id()));
+        let lean_task_dir = dir.join(".trellis").join("research").join("feature-x");
+        std::fs::create_dir_all(&lean_task_dir).unwrap();
+        std::fs::write(lean_task_dir.join("prd.md"), "# PRD: Feature X").unwrap();
+        std::fs::write(lean_task_dir.join("design.md"), "# Design: Feature X").unwrap();
+        std::fs::write(lean_task_dir.join("implement.md"), "- [ ] Step 1").unwrap();
+
+        let docs = collect_docs(&lean_task_dir);
+        let labels: Vec<&str> = docs.iter().map(|d| d.label.as_str()).collect();
+        assert_eq!(labels, ["PRD", "DESIGN", "IMPLEMENT"]);
+        assert_eq!(docs[0].content, "# PRD: Feature X");
+        assert_eq!(docs[1].content, "# Design: Feature X");
+        assert_eq!(docs[2].content, "- [ ] Step 1");
 
         std::fs::remove_dir_all(&dir).unwrap();
     }
