@@ -12,13 +12,13 @@ description: "Structured, single-agent workflow for large features and complex r
 
 ## 1. Core Conversational Triggers
 
-The user interacts using natural language. The assistant automatically activates the corresponding phase:
+The user interacts using natural language. The assistant automatically activates the corresponding phase and updates document status:
 
-| User Prompt (English or Vietnamese) | Autonomous Assistant Actions |
-| :--- | :--- |
-| **1. "Tạo task / Lập kế hoạch `<name>`"**<br>*or "Create task `<name>`", "Plan feature `<name>`", `/plan `<name>`* | **Autonomous Scaffolding & Planning**:<br>• Create topic directory `.trellis/research/<slug>/`<br>• Initialize `prd.md`, `design.md`, `implement.md`<br>• Inspect existing codebase evidence first, then clarify requirements. |
-| **2. "Implement task `<name>`"**<br>*or "Triển khai task `<name>`", "Start coding..."* | **Direct In-Session Execution**:<br>• Read `implement.md` to identify pending tasks (`[ ]`).<br>• Write code, run tests incrementally, and mark `[x]`.<br>• Collaborate directly in the active session with real-time feedback. |
-| **3. "Check task `<name>`"**<br>*or "Nghiệm thu task `<name>`", "Finish task..."* | **Verification & Knowledge Persistence**:<br>• Reconcile Acceptance Criteria in `prd.md`.<br>• Execute the project test suite (`npm test`, build check).<br>• Update `.trellis/spec/` conventions and record session journal via `add_session.py`. |
+| User Prompt (English or Vietnamese) | Autonomous Assistant Actions | Mandatory Status Transition |
+| :--- | :--- | :--- |
+| **1. "Tạo task / Lập kế hoạch `<name>`"**<br>*or "Create task `<name>`", "Plan feature `<name>`", `/plan `<name>`* | **Autonomous Scaffolding & Planning**:<br>• Create topic directory `.trellis/research/<slug>/`<br>• Initialize `prd.md`, `design.md`, `implement.md`<br>• Inspect existing codebase evidence first, then clarify requirements.<br>• Confirm scope and approve plan. | • `prd.md`: `Draft` ➔ `Approved`<br>• `design.md`: `Draft` ➔ `Approved`<br>• `implement.md`: `Planning` |
+| **2. "Implement task `<name>`"**<br>*or "Triển khai task `<name>`", "Start coding..."* | **Direct In-Session Execution**:<br>• Set status to `In Progress`.<br>• Read `implement.md` to identify pending tasks (`[ ]`).<br>• Write code, run tests incrementally, and mark `[x]` (only in Section 1).<br>• Upon finishing all checklist items, set status to `Verification` and output 2 Git commands (`git add`, `git commit`). | • Start: `implement.md` ➔ `In Progress`<br>• All items done: `implement.md` ➔ `Verification` |
+| **3. "Check task `<name>`"**<br>*or "Nghiệm thu task `<name>`", "Finish task..."* | **Verification & Knowledge Persistence**:<br>• Reconcile Acceptance Criteria in `prd.md`.<br>• Execute the project test suite (`npm test`, build check).<br>• Update status to `Completed` across task docs.<br>• Update `.trellis/spec/` conventions and record session journal via `add_session.py`. | • `prd.md` ➔ `Completed`<br>• `design.md` ➔ `Completed`<br>• `implement.md` ➔ `Completed` |
 
 ---
 
@@ -40,11 +40,12 @@ The user interacts using natural language. The assistant automatically activates
 - All phases (planning, coding, testing, verification) execute sequentially within the active chat session.
 - Keep the user in the loop with short, continuous progress updates.
 
-### 4. Topic Directory Management
+### 4. Topic Directory Management & Markdown Hygiene
 - Maintain artifacts under `.trellis/research/<slug>/`:
   - `prd.md`: Requirements, in-scope/out-of-scope, testable acceptance criteria.
   - `design.md`: Architecture, data flow, contracts, and **Alternatives Considered** (always state the strongest reason for a rejected path before explaining why it was dismissed).
   - `implement.md`: Ordered checklist with `[ ]` checkboxes, target files, and test commands.
+- **Checklist Scope Rule**: Markdown checkboxes `- [ ]` and `- [x]` are **strictly reserved** for `## 1. Ordered Implementation Checklist`. Never use checkboxes in `## 3. Risk Watchlist`, notes, or references (use standard bullet points `- ` instead) to avoid corrupting subtask scanners.
 
 ---
 
@@ -52,7 +53,7 @@ The user interacts using natural language. The assistant automatically activates
 
 ### Phase 1: Planning ("Tạo task / Plan `<name>`")
 1. Derive a concise URL-safe `slug` from the feature name (e.g., `user-auth`, `kanban-sync`).
-2. Scaffold `.trellis/research/<slug>/` with `prd.md`, `design.md`, and `implement.md` from templates (or run `scripts/new-feature.sh <slug> "<name>"`).
+2. Scaffold `.trellis/research/<slug>/` with `prd.md` (`Status: Draft`), `design.md` (`Status: Draft`), and `implement.md` (`Status: Planning`) from templates (or run `scripts/new-feature.sh <slug> "<name>"`).
 3. Recall prior relevant project decisions:
    ```bash
    lean-trellis mem recall "<feature keywords>"
@@ -60,7 +61,9 @@ The user interacts using natural language. The assistant automatically activates
 4. Read relevant specs under `.trellis/spec/` or `docs/`.
 5. Pre-fill known facts and repository constraints into `prd.md`.
 6. Ask the single highest-value question if product intent is missing. Update `prd.md` upon user response.
-7. Present the PRD summary and await user confirmation before proceeding to design.
+7. Present the PRD summary and await user confirmation. Once confirmed:
+   - Promote `prd.md` header to `**Status:** Approved`.
+   - Promote `design.md` header to `**Status:** Approved`.
 
 ### Phase 2: Technical Design (`design.md`)
 1. Detail component boundaries, schemas, and contract interfaces.
@@ -68,27 +71,63 @@ The user interacts using natural language. The assistant automatically activates
 3. Define backward compatibility and rollback precautions.
 
 ### Phase 3: Implementation Checklist (`implement.md`)
-1. Break down implementation into 3-5 distinct phases.
+1. Break down implementation into 3-5 distinct phases in `## 1. Ordered Implementation Checklist`.
 2. Each item must have a testable task checkbox `[ ]`, files to modify, and validation commands.
+3. Keep `## 3. Risk Watchlist` as plain bullet points (`- `), never checkboxes.
 
 ### Phase 4: Implementation ("Implement task `<name>`")
-1. Read `implement.md` to locate the current pending subtask (`[ ]`).
-2. Implement code directly in the active session.
-3. Validate immediately with unit tests or build commands.
-4. Update `implement.md` by checking off `[x]`.
-5. Provide a brief progress summary and move to the next item.
+1. **Initial Status Update**: Immediately edit `implement.md` header to `**Status:** In Progress`.
+2. Read `implement.md` to locate the current pending subtask (`[ ]`).
+3. Implement code directly in the active session.
+4. Validate immediately with unit tests or build commands.
+5. Update `implement.md` by checking off `[x]`.
+6. Provide a brief progress summary and move to the next item.
+7. **Pre-Verification Git Hand-off & Verification Status**: Once all items in `## 1. Ordered Implementation Checklist` are marked `[x]`:
+   - Update `implement.md` header to `**Status:** Verification`.
+   - Output 2 ready-to-run Git commands:
+     - `git add <file1> <file2> ...` (explicitly list only the files touched by this task; never use blind `git add .`).
+     - `git commit -m "<type(scope): concise conventional commit message>"`.
 
 ### Phase 5: Verification & Completion ("Check task `<name>`")
 1. Run the project verification suite (`npm test`, build check, type check).
 2. Explicitly verify every Acceptance Criterion in `prd.md`.
-3. If durable project conventions were established, update `.trellis/spec/` using `lean-trellis-update-spec`.
-4. Record the completed session in the developer journal:
+3. **Synchronize Completed Status**:
+   - Update `prd.md` header to `**Status:** Completed`.
+   - Update `design.md` header to `**Status:** Completed`.
+   - Update `implement.md` header to `**Status:** Completed`.
+4. If durable project conventions were established, update `.trellis/spec/` using `lean-trellis-update-spec`.
+5. Record the completed session in the developer journal:
    ```bash
    python3 ./.trellis/scripts/add_session.py \
      --title "Complete task: <feature-name>" \
      --summary "<Summary of implementation, key decisions, and tests passed>" \
      --topic .trellis/research/<slug>/prd.md
    ```
+   (Pass `--commit <hash>` if the user executed the recommended git commit prior to verification).
+
+---
+
+## 4. Deterministic Status Lifecycle & Kanban Lane Mapping
+
+Lean Trellis enforces a **concrete, single-value status** in document headers. Template placeholders with pipe options (e.g., `Draft | In Review | Approved`) are strictly forbidden.
+
+### Canonical Status Enum
+
+| Document | Canonical Status Values | Kanban Lane | Meaning |
+| :--- | :--- | :--- | :--- |
+| **`implement.md`** *(Primary Execution State)* | `Planning` | Lane 1: Planning | Task scaffolded; requirements & checklist being planned. |
+| | `In Progress` | Lane 2: In Progress | Actively being coded in active chat session. |
+| | `Verification` | Lane 3: Verification / Review | Code checklist 100% complete; running test suite & AC checks. |
+| | `Blocked` | Lane 3: Blocked | Work halted due to blocker or external dependency. |
+| | `Completed` | Lane 4: Done | Verified, tests passed, session journal recorded. |
+| **`prd.md`** *(Requirement Lifecycle)* | `Draft` ➔ `In Review` ➔ `Approved` ➔ `Completed` | Planning (Draft/In Review/Approved), Done (Completed) | Tracks requirements maturity. |
+| **`design.md`** *(Architecture Lifecycle)* | `Draft` ➔ `Approved` ➔ `Completed` | Planning (Draft/Approved), Done (Completed) | Tracks technical design maturity. |
+
+### Observer Precedence Rule
+For external observers (e.g., Trellis Card desktop app, scripts):
+1. **Explicit Status First**: The `Status:` header in `implement.md` is the Single Source of Truth for task execution state. If absent, fallback to `prd.md`.
+2. **Subtask Progress**: Percentage progress is derived **strictly** from `[x]` vs `[ ]` within `## 1. Ordered Implementation Checklist`. Checkboxes outside this section must not exist.
+3. **Completion Invariant**: A task is only moved to `Done` (Lane 4) when its explicit status is `Completed` (or directory is moved to `archive/`). Checklist item completion alone triggers `Verification`, not premature completion.
 
 ---
 

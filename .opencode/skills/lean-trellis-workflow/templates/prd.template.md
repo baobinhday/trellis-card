@@ -1,6 +1,7 @@
 # PRD: {{FEATURE_TITLE}}
 
-**Status:** Draft | In Review | Approved  
+**Status:** Draft
+<!-- Lifecycle: Draft -> In Review -> Approved -> Completed -->
 **Topic Path:** `.trellis/research/{{FEATURE_SLUG}}/`  
 **Date:** {{DATE}}  
 

@@ -11,11 +11,25 @@ Instead of spawning detached background sub-agents, the entire implementation wo
 
 ---
 
-## 2. Checklist Discipline
-1. Follow `implement.md`:
+## 2. Checklist & Status Discipline
+1. **Set Initial Status**:
+   - Immediately edit `implement.md` header to `**Status:** In Progress` when beginning implementation.
+2. Follow `implement.md`:
    - Execute tasks step-by-step in logical order.
    - Do not skip ahead before verifying the current step.
-2. Update state directly:
+3. Update state directly:
    - Edit `implement.md` to change `[ ]` to `[x]` as each task completes.
-3. Verify frequently:
+   - Markdown checkboxes `- [ ]` and `- [x]` are strictly confined to `## 1. Ordered Implementation Checklist`. Never use checkboxes in `## 3. Risk Watchlist` or notes.
+4. Verify frequently:
    - Run unit tests or project build checks after each significant change to catch regressions immediately.
+
+---
+
+## 3. Pre-Verification Git Hand-off & Verification Status
+Once all items in `implement.md` are marked `[x]`, before prompting the user for verification or nghiệm thu:
+1. Update `implement.md` header to `**Status:** Verification`.
+2. Output 2 ready-to-run Git commands:
+   - `git add <file1> <file2> ...` (specifically enumerate all files touched by this task; never use blind `git add .`).
+   - `git commit -m "<type(scope): concise description>"` (meaningful conventional commit message).
+
+The developer can review and execute the commit, allowing the resulting commit hash to be passed to `add_session.py --commit <hash>` during the subsequent verification phase.

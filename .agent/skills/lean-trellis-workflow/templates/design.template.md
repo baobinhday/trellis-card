@@ -1,6 +1,7 @@
 # Technical Design: {{FEATURE_TITLE}}
 
-**Status:** Proposed | Approved | Implemented  
+**Status:** Draft
+<!-- Lifecycle: Draft -> Approved -> Completed -->
 **Topic Path:** `.trellis/research/{{FEATURE_SLUG}}/`  
 **PRD Reference:** [prd.md](./prd.md)  
 

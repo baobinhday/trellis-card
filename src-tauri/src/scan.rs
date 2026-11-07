@@ -254,7 +254,7 @@ fn scan_artifacts(task_dir: &Path) -> Artifacts {
 }
 
 // 从 status + artifacts 推断细粒度阶段（对齐 Trellis workflow Phase 1.0-3.5）
-fn infer_phase(status: &str, a: &Artifacts) -> Phase {
+fn infer_phase(status: &str, a: &Artifacts, is_lean: bool) -> Phase {
     let p = |id: &str, label: &str, warn: bool| Phase {
         id: id.into(),
         label: label.into(),
@@ -272,10 +272,16 @@ fn infer_phase(status: &str, a: &Artifacts) -> Phase {
             }
         }
         "planning" => {
-            if a.implement || a.impl_entries > 0 {
+            if is_lean {
+                if a.implement {
+                    p("ready", "Planning · Ready to start", false)
+                } else {
+                    p("explore", "Planning · Exploring", false)
+                }
+            } else if a.impl_entries > 0 {
                 p("ready", "Planning · Ready to start", false)
             } else if a.prd {
-                p("explore", "Planning · Exploring", false)
+                p("need-context", "Planning · Needs spec context", true)
             } else {
                 p("explore", "Planning · Exploring", false)
             }
@@ -644,7 +650,7 @@ fn build_task(
     let status = raw.status.clone().unwrap_or_else(|| "planning".into());
     let progress = crate::progress::compute_progress(&status, &raw.subtasks);
     let (lane, kind) = crate::progress::lane_model(&status);
-    let phase = infer_phase(&status, &artifacts);
+    let phase = infer_phase(&status, &artifacts, false);
     let workflow = resolve_task_workflow(
         raw.workflow.as_deref(),
         location.developer_workflow,
@@ -1082,14 +1088,49 @@ fn strip_markdown_formatting(s: &str) -> String {
     t.trim().to_string()
 }
 
+fn extract_lean_status_line(file_path: &Path) -> Option<String> {
+    let content = fs::read_to_string(file_path).ok()?;
+    for line in content.lines() {
+        let trimmed = line.trim();
+        let clean = trimmed.trim_matches('*').trim();
+        if let Some(rest) = clean.strip_prefix("Status:") {
+            let raw_val = rest.trim().trim_matches('*').trim();
+            // Discard unedited template placeholders like "Draft | In Review | Approved"
+            if raw_val.contains('|') {
+                continue;
+            }
+            // Strip any HTML comment e.g. <!-- Canonical: ... -->
+            let val = if let Some(idx) = raw_val.find("<!--") {
+                raw_val[..idx].trim()
+            } else {
+                raw_val
+            }
+            .to_lowercase();
+
+            if val.contains("completed") || val.contains("done") || val.contains("accepted") {
+                return Some("done".to_string());
+            } else if val.contains("review") || val.contains("verification") {
+                return Some("review".to_string());
+            } else if val.contains("blocked") {
+                return Some("blocked".to_string());
+            } else if val.contains("in_progress") || val.contains("in progress") || val.contains("implementing") {
+                return Some("in_progress".to_string());
+            } else if val.contains("approved") {
+                return Some("approved".to_string());
+            } else if val.contains("planning") || val.contains("ready") || val.contains("draft") {
+                return Some("planning".to_string());
+            }
+        }
+    }
+    None
+}
+
 pub fn parse_lean_subtasks_and_status(
     task_path: &Path,
     archived: bool,
 ) -> (Vec<Subtask>, String, f64, u8, &'static str, Option<String>) {
     let mut subtasks = Vec::new();
     let mut created_at = None;
-    let mut explicit_status: Option<String> = None;
-    let mut prd_approved = false;
 
     if let Ok(prd_content) = fs::read_to_string(task_path.join("prd.md")) {
         for line in prd_content.lines() {
@@ -1106,41 +1147,33 @@ pub fn parse_lean_subtasks_and_status(
                     created_at = Some(val.to_string());
                 }
             }
-            if let Some(rest) = clean.strip_prefix("Status:") {
-                let val = rest.trim().trim_matches('*').trim().to_lowercase();
-                if val.contains("in_progress") || val.contains("in progress") {
-                    explicit_status = Some("in_progress".to_string());
-                } else if val.contains("review") || val.contains("verification") {
-                    explicit_status = Some("review".to_string());
-                } else if val.contains("blocked") {
-                    explicit_status = Some("blocked".to_string());
-                } else if val.contains("completed") || val.contains("done") {
-                    explicit_status = Some("done".to_string());
-                } else if val.contains("approved") {
-                    prd_approved = true;
-                }
-            }
         }
     }
 
     let impl_path = task_path.join("implement.md");
     if let Ok(content) = fs::read_to_string(&impl_path) {
+        let has_structured_checklist = content.lines().any(|l| {
+            let t = l.trim().to_lowercase();
+            t.starts_with("## 1") || t.contains("checklist")
+        });
+
+        let mut in_checklist = !has_structured_checklist;
+
         for line in content.lines() {
             let trimmed = line.trim();
-            let clean = trimmed.trim_matches('*').trim();
-            if explicit_status.is_none() {
-                if let Some(rest) = clean.strip_prefix("Status:") {
-                    let val = rest.trim().trim_matches('*').trim().to_lowercase();
-                    if val.contains("in_progress") || val.contains("in progress") {
-                        explicit_status = Some("in_progress".to_string());
-                    } else if val.contains("review") || val.contains("verification") {
-                        explicit_status = Some("review".to_string());
-                    } else if val.contains("blocked") {
-                        explicit_status = Some("blocked".to_string());
-                    } else if val.contains("completed") || val.contains("done") {
-                        explicit_status = Some("done".to_string());
-                    }
+
+            if trimmed.starts_with("## ") {
+                let heading_lower = trimmed.to_lowercase();
+                if heading_lower.starts_with("## 1") || heading_lower.contains("checklist") {
+                    in_checklist = true;
+                    continue;
+                } else {
+                    in_checklist = false;
                 }
+            }
+
+            if !in_checklist {
+                continue;
             }
 
             let (is_checked, is_unchecked, rest) = if let Some(r) = trimmed
@@ -1185,31 +1218,72 @@ pub fn parse_lean_subtasks_and_status(
         .filter(|s| s.status.as_deref() == Some("done"))
         .count();
 
-    let (status, progress) = if archived {
-        let prog = if total > 0 {
-            done_count as f64 / total as f64
-        } else {
-            1.0
-        };
-        ("done".to_string(), prog)
-    } else if total > 0 && done_count == total {
-        let s = explicit_status.unwrap_or_else(|| "done".to_string());
-        (s, 1.0)
-    } else if done_count > 0 {
-        ("in_progress".to_string(), done_count as f64 / total as f64)
-    } else if total > 0 && done_count == 0 {
-        ("planning".to_string(), 0.0)
-    } else if let Some(ref exp) = explicit_status {
-        let prog = match exp.as_str() {
-            "done" => 1.0,
-            "review" => 0.85,
-            "in_progress" => 0.5,
-            _ => 0.1,
-        };
-        (exp.clone(), prog)
+    let computed_progress = if total > 0 {
+        done_count as f64 / total as f64
     } else {
-        let prog = if prd_approved { 0.1 } else { 0.05 };
-        ("planning".to_string(), prog)
+        0.0
+    };
+
+    // 1. Read implement.md status first, fallback to prd.md
+    let impl_status = extract_lean_status_line(&task_path.join("implement.md"));
+    let prd_status = extract_lean_status_line(&task_path.join("prd.md"));
+
+    let (explicit_status, prd_approved) = match (impl_status, prd_status) {
+        (Some(s), _) => (Some(s), false),
+        (None, Some(s)) => {
+            if s == "approved" {
+                (Some("planning".to_string()), true)
+            } else {
+                (Some(s), false)
+            }
+        }
+        (None, None) => (None, false),
+    };
+
+    let (status, progress) = if archived {
+        let prog = if total > 0 { computed_progress } else { 1.0 };
+        ("done".to_string(), prog)
+    } else if let Some(ref exp) = explicit_status {
+        match exp.as_str() {
+            "done" => ("done".to_string(), 1.0),
+            "review" => {
+                let prog = if total > 0 { computed_progress } else { 0.85 };
+                ("review".to_string(), prog)
+            }
+            "blocked" => {
+                let prog = if total > 0 { computed_progress } else { 0.0 };
+                ("blocked".to_string(), prog)
+            }
+            "in_progress" => {
+                if total > 0 && done_count == total {
+                    // Auto-complete if prd had in_progress but checklist is 100% finished
+                    ("done".to_string(), 1.0)
+                } else {
+                    let prog = if total > 0 { computed_progress } else { 0.5 };
+                    ("in_progress".to_string(), prog)
+                }
+            }
+            "planning" => {
+                let prog = if total > 0 {
+                    computed_progress
+                } else if prd_approved {
+                    0.1
+                } else {
+                    0.05
+                };
+                ("planning".to_string(), prog)
+            }
+            other => (other.to_string(), computed_progress),
+        }
+    } else {
+        // Fallback when NO explicit status is provided anywhere
+        if total > 0 && done_count == total {
+            ("done".to_string(), 1.0)
+        } else if done_count > 0 {
+            ("in_progress".to_string(), computed_progress)
+        } else {
+            ("planning".to_string(), 0.05)
+        }
     };
 
     let (lane, kind) = crate::progress::lane_model(&status);
@@ -1281,7 +1355,7 @@ fn scan_lean_task_dir(
     } else {
         sessions.get(dir_name).cloned().unwrap_or_default()
     };
-    let phase = infer_phase(&status, &artifacts);
+    let phase = infer_phase(&status, &artifacts, true);
     let workflow = resolve_task_workflow(None, developer_workflow, config_default_workflow);
 
     tasks.push(Task {
@@ -2239,14 +2313,27 @@ paths: [src/index.ts, 'test/*.test.js', "docs/**"]
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
         let (tasks, errors) = scan_tasks(root);
         assert!(errors.is_empty(), "Errors: {:?}", errors);
-        let support = tasks.iter().find(|t| t.id == "support-lean-trellis");
-        assert!(
-            support.is_some(),
-            "support-lean-trellis should be discovered in current repo"
-        );
-        let task = support.unwrap();
-        assert_eq!(task.title, "Support Lean Trellis in Trellis Card");
-        assert!(task.subtasks.len() > 0);
+
+        let support = tasks.iter().find(|t| t.id == "support-lean-trellis").expect("support-lean-trellis");
+        assert_eq!(support.title, "Support Lean Trellis in Trellis Card");
+        assert_eq!(support.status, "done");
+        assert_eq!(support.lane, 3);
+        assert_eq!(support.progress, 1.0);
+
+        let refactor = tasks.iter().find(|t| t.id == "refactor-lean-trellis-lifecycle-ui").expect("refactor-lean-trellis-lifecycle-ui");
+        assert_eq!(refactor.status, "done");
+        assert_eq!(refactor.lane, 3);
+        assert_eq!(refactor.progress, 1.0);
+
+        let deepseek = tasks.iter().find(|t| t.id == "deepseek-board-integration").expect("deepseek-board-integration");
+        assert_eq!(deepseek.status, "done");
+        assert_eq!(deepseek.lane, 3);
+        assert_eq!(deepseek.progress, 1.0);
+
+        let strict = tasks.iter().find(|t| t.id == "strict-status-lifecycle").expect("strict-status-lifecycle");
+        assert_eq!(strict.status, "done");
+        assert_eq!(strict.lane, 3);
+        assert_eq!(strict.progress, 1.0);
     }
 
     #[test]
@@ -2279,5 +2366,53 @@ paths: [src/index.ts, 'test/*.test.js', "docs/**"]
         assert!(pitfalls[1].option_name.contains("Option C"));
         assert_eq!(pitfalls[1].seductive_trap, "Rất đẹp mắt");
         assert_eq!(pitfalls[1].why_rejected, "Tốn CPU/GPU không cần thiết");
+    }
+
+    #[test]
+    fn test_strict_status_first_and_scoped_checklist() {
+        let root = std::env::temp_dir().join(format!("trellis-card-strict-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        let task_dir = root.join(".trellis/research/strict-feature");
+        fs::create_dir_all(&task_dir).unwrap();
+
+        // 1. prd with template placeholder "Draft | In Review | Approved" should be ignored
+        fs::write(
+            task_dir.join("prd.md"),
+            "# PRD: Strict Feature\n\n**Status:** Draft | In Review | Approved\n**Date:** 2026-11-07\n",
+        )
+        .unwrap();
+
+        // 2. implement with Status: Completed, and checklist with 2 items, plus Risk Watchlist with unchecked boxes
+        fs::write(
+            task_dir.join("implement.md"),
+            r#"# Implementation Plan: Strict Feature
+
+**Status:** Completed
+
+## 1. Ordered Implementation Checklist
+- [x] Step 1: Core logic
+- [ ] Step 2: Extra polish
+
+## 3. Risk Watchlist
+- [ ] Watch file A
+- [ ] Watch file B
+"#,
+        )
+        .unwrap();
+
+        let (tasks, errors) = scan_tasks(&root);
+        assert!(errors.is_empty());
+        assert_eq!(tasks.len(), 1);
+        let t = &tasks[0];
+        // Scoped checklist only extracted 2 subtasks from ## 1, completely ignoring ## 3. Risk Watchlist
+        assert_eq!(t.subtasks.len(), 2);
+        assert_eq!(t.subtasks[0].name, "Step 1: Core logic");
+        assert_eq!(t.subtasks[1].name, "Step 2: Extra polish");
+        // Explicit Status: Completed overrides incomplete checklist and sets status to "done"
+        assert_eq!(t.status, "done");
+        assert_eq!(t.lane, 3); // Lane 3: Done
+        assert_eq!(t.progress, 1.0);
+
+        let _ = fs::remove_dir_all(&root);
     }
 }

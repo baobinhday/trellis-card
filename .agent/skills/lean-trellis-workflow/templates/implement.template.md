@@ -1,6 +1,7 @@
 # Implementation Plan: {{FEATURE_TITLE}}
 
-**Status:** Ready | In Progress | Completed  
+**Status:** Planning
+<!-- Lifecycle: Planning -> In Progress -> Verification -> Completed (or Blocked) -->
 **PRD Reference:** [prd.md](./prd.md)  
 **Design Reference:** [design.md](./design.md)  
 
@@ -45,5 +46,6 @@ npm run build
 ---
 
 ## 3. Risk Watchlist
-- [ ] Watch file `path/to/sensitive/file.ts`: Maintain compatibility for dependent modules.
-- [ ] Ensure credentials or secrets are not committed or exposed.
+*(Non-task reference watchlist. Use plain bullet points, never `- [ ]` checkboxes to prevent checklist confusion)*
+- Watch file `path/to/sensitive/file.ts`: Maintain compatibility for dependent modules.
+- Ensure credentials or secrets are not committed or exposed.
