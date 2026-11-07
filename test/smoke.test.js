@@ -41,4 +41,8 @@ test("smoke test: build output contains required files", () => {
     jsContent.includes("Timeline"),
     "bundle should include Evolution Timeline view"
   );
+  assert.ok(
+    jsContent.includes("trellis_task_detail_width"),
+    "bundle should include resizable task detail drawer width persistence"
+  );
 });

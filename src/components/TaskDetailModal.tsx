@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import {
@@ -32,6 +32,10 @@ interface TaskDetailModalProps {
   onOpenSpec?: (specPath: string) => void;
 }
 
+const DEFAULT_DRAWER_WIDTH = 672;
+const MIN_DRAWER_WIDTH = 420;
+const getMaxDrawerWidth = () => Math.max(MIN_DRAWER_WIDTH, Math.min(window.innerWidth - 60, 1400));
+
 export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
   task,
   projectPath,
@@ -50,6 +54,97 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
   const [copiedDir, setCopiedDir] = useState(false);
   const [isArchiving, setIsArchiving] = useState(false);
   const [subtasks, setSubtasks] = useState(task?.subtasks || []);
+
+  // Resizable drawer width state with localStorage persistence
+  const [drawerWidth, setDrawerWidth] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem("trellis_task_detail_width");
+      if (saved) {
+        const parsed = parseInt(saved, 10);
+        if (!isNaN(parsed) && parsed >= MIN_DRAWER_WIDTH) {
+          return Math.min(parsed, getMaxDrawerWidth());
+        }
+      }
+    } catch {
+      // ignore localStorage errors
+    }
+    return DEFAULT_DRAWER_WIDTH;
+  });
+
+  const [isResizing, setIsResizing] = useState(false);
+  const isResizingRef = useRef(false);
+  const justResizedRef = useRef(false);
+  const drawerWidthRef = useRef(drawerWidth);
+
+  useEffect(() => {
+    drawerWidthRef.current = drawerWidth;
+  }, [drawerWidth]);
+
+  // Adjust drawer width if browser window shrinks
+  useEffect(() => {
+    const handleWindowResize = () => {
+      const maxW = getMaxDrawerWidth();
+      if (drawerWidthRef.current > maxW) {
+        setDrawerWidth(maxW);
+      }
+    };
+    window.addEventListener("resize", handleWindowResize);
+    return () => window.removeEventListener("resize", handleWindowResize);
+  }, []);
+
+  // Keyboard shortcut: Escape to close modal
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onClose]);
+
+  // Handle dragging resize on the left border of the drawer
+  const handleMouseDownResize = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    isResizingRef.current = true;
+    setIsResizing(true);
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      if (!isResizingRef.current) return;
+      const newWidth = window.innerWidth - moveEvent.clientX;
+      const clampedWidth = Math.max(MIN_DRAWER_WIDTH, Math.min(newWidth, getMaxDrawerWidth()));
+      setDrawerWidth(clampedWidth);
+    };
+
+    const handleMouseUp = () => {
+      if (isResizingRef.current) {
+        isResizingRef.current = false;
+        setIsResizing(false);
+        justResizedRef.current = true;
+        setTimeout(() => {
+          justResizedRef.current = false;
+        }, 100);
+        try {
+          localStorage.setItem("trellis_task_detail_width", drawerWidthRef.current.toString());
+        } catch {
+          // ignore localStorage errors
+        }
+      }
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+    };
+
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", handleMouseUp);
+  }, []);
+
+  // Backdrop click-to-close handler (safeguarded against drag release)
+  const handleBackdropClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (justResizedRef.current) return;
+    if (e.target === e.currentTarget) {
+      onClose();
+    }
+  };
 
   useEffect(() => {
     setSubtasks(task?.subtasks || []);
@@ -144,8 +239,32 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
     : `${projectPath}/.trellis/tasks/${task.archived && !task.dir.startsWith("archive/") ? `archive/*/${task.dir}` : task.dir}`;
 
   return (
-    <div className="fixed inset-0 z-50 overflow-hidden bg-black/40 backdrop-blur-xs flex justify-end transition-opacity">
-      <div className="w-full max-w-2xl bg-white dark:bg-trellis-darkCard h-full shadow-2xl flex flex-col border-l border-gray-200 dark:border-trellis-darkBorder animate-in slide-in-from-right duration-200">
+    <div
+      className={`fixed inset-0 z-50 overflow-hidden bg-black/40 backdrop-blur-xs flex justify-end transition-opacity ${
+        isResizing ? "select-none cursor-col-resize" : ""
+      }`}
+      onClick={handleBackdropClick}
+    >
+      <div
+        style={{ width: `${drawerWidth}px` }}
+        className="relative max-w-full bg-white dark:bg-trellis-darkCard h-full shadow-2xl flex flex-col border-l border-gray-200 dark:border-trellis-darkBorder animate-in slide-in-from-right duration-200 flex-shrink-0"
+      >
+        {/* Resize Handle on the left border */}
+        <div
+          onMouseDown={handleMouseDownResize}
+          title="Kéo để thay đổi độ rộng (Drag to resize)"
+          aria-label="Kéo để thay đổi độ rộng drawer"
+          className="absolute -left-1.5 top-0 bottom-0 w-3 cursor-col-resize group z-30 flex items-center justify-center hover:bg-transparent"
+        >
+          {/* Subtle drag indicator bar */}
+          <div
+            className={`w-1 h-14 rounded-full transition-all duration-150 ${
+              isResizing
+                ? "bg-indigo-600 dark:bg-indigo-400 scale-y-125 shadow-sm"
+                : "bg-transparent group-hover:bg-indigo-400/80 dark:group-hover:bg-indigo-400/60"
+            }`}
+          />
+        </div>
         {/* Header */}
         <div className="p-5 border-b border-gray-200 dark:border-trellis-darkBorder flex items-start justify-between gap-4 flex-shrink-0">
           <div className="min-w-0 flex-1">
