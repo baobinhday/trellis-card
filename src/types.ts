@@ -117,15 +117,51 @@ export interface TaskRelation {
   subtasks: Subtask[];
   progress: number;
   archived: boolean;
+  sessions?: SessionInfo[];
+  kind?: string;
+  workflow?: string;
 }
 
 export interface SpecGroup {
-  spec: string;
-  tasks: string[];
+  path: string;
+  count: number;
+  taskIds: string[];
+}
+
+export interface PrdGroup {
+  refTaskId: string;
+  taskIds: string[];
 }
 
 export interface RelationsPayload {
   tasks: TaskRelation[];
   specGroups: SpecGroup[];
-  prdGroups: SpecGroup[];
+  prdGroups: PrdGroup[];
+}
+
+export type ActiveView = 'kanban' | 'graph' | 'pitfalls' | 'timeline';
+
+export interface PitfallEntry {
+  taskId: string;
+  taskTitle: string;
+  optionName: string;
+  seductiveTrap: string;
+  whyRejected: string;
+  sourcePath: string;
+}
+
+export interface GraphNode {
+  id: string;
+  label: string;
+  kind: 'spec' | 'task' | 'session';
+  status?: string;
+  group?: string;
+  archived?: boolean;
+}
+
+export interface GraphEdge {
+  id: string;
+  source: string;
+  target: string;
+  relationType: 'spec_ref' | 'parent_child' | 'session_ref' | 'prd_ref';
 }

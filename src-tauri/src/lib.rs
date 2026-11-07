@@ -1020,6 +1020,16 @@ fn list_specs(state: State<AppState>, project: String) -> Result<Vec<SpecOut>, S
     Ok(specs)
 }
 
+// 扫描项目中所有 design.md 并返回负向决策/避坑档案（DeepSeek discipline）
+#[tauri::command]
+fn list_pitfalls(state: State<AppState>, project: String) -> Result<Vec<scan::PitfallEntry>, String> {
+    if !is_allowed_project(&state, &project) {
+        return Err("Project not found in scanned directories".into());
+    }
+    let project_dir = expand(&project);
+    Ok(scan::scan_pitfalls(&project_dir))
+}
+
 // prd 显式跨任务引用（官方 FAQ Q25）：被引用的任务 → 引用它的任务列表。
 // 只统计指向「本项目存在任务」的引用，避免悬空路径。
 fn compute_prd_groups(relations: &[TaskRelation]) -> Vec<PrdGroup> {
@@ -1591,6 +1601,7 @@ pub fn run() {
             list_archived,
             list_relations,
             list_specs,
+            list_pitfalls,
             get_task,
             archive_task,
             update_task_status,

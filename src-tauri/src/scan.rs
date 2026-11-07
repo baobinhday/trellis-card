@@ -112,6 +112,18 @@ pub struct Phase {
     pub warn: bool,
 }
 
+// 负向资产/避坑档案条目 (DeepSeek discipline: Seductive Trap & Why Rejected)
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
+#[serde(rename_all = "camelCase", default)]
+pub struct PitfallEntry {
+    pub task_id: String,
+    pub task_title: String,
+    pub option_name: String,
+    pub seductive_trap: String,
+    pub why_rejected: String,
+    pub source_path: String,
+}
+
 // 统计 jsonl 里带 "file" 键的真实条目（seed 行只有 "_example" 说明，不算）
 fn count_jsonl_entries(path: &Path) -> usize {
     fs::read_to_string(path)
@@ -1359,6 +1371,189 @@ fn scan_lean_archived_dir(
     }
 }
 
+fn extract_bullet_value(line: &str) -> String {
+    if let Some(idx) = line.find(":**") {
+        line[idx + 3..].trim().to_string()
+    } else if let Some(idx) = line.find(':') {
+        let after = line[idx + 1..].trim();
+        after.trim_start_matches('*').trim().to_string()
+    } else {
+        line.to_string()
+    }
+}
+
+pub fn parse_pitfalls_from_markdown(
+    content: &str,
+    task_id: &str,
+    task_title: &str,
+    source_path: &str,
+) -> Vec<PitfallEntry> {
+    let mut entries = Vec::new();
+    let mut in_alternatives = false;
+
+    struct CurrentOption {
+        name: String,
+        is_chosen: bool,
+        is_rejected: bool,
+        description: Vec<String>,
+        trap: Vec<String>,
+        why_rejected: Vec<String>,
+        current_target: u8, // 0 = none, 1 = desc, 2 = trap, 3 = why_rejected
+    }
+
+    let mut cur: Option<CurrentOption> = None;
+
+    let flush_option = |cur: Option<CurrentOption>, entries: &mut Vec<PitfallEntry>| {
+        if let Some(opt) = cur {
+            let trap_str = opt.trap.join("\n").trim().to_string();
+            let why_str = opt.why_rejected.join("\n").trim().to_string();
+            let desc_str = opt.description.join("\n").trim().to_string();
+
+            let is_rejected = opt.is_rejected || !why_str.is_empty();
+            if !opt.is_chosen && is_rejected {
+                let final_trap = if trap_str.is_empty() { desc_str } else { trap_str };
+                if !final_trap.is_empty() || !why_str.is_empty() {
+                    entries.push(PitfallEntry {
+                        task_id: task_id.to_string(),
+                        task_title: task_title.to_string(),
+                        option_name: opt.name,
+                        seductive_trap: final_trap,
+                        why_rejected: why_str,
+                        source_path: source_path.to_string(),
+                    });
+                }
+            }
+        }
+    };
+
+    for line in content.lines() {
+        let trimmed = line.trim();
+
+        if trimmed.starts_with("## ") {
+            let lower = trimmed.to_lowercase();
+            if lower.contains("alternative") || lower.contains("phương án") || lower.contains("rejected") {
+                in_alternatives = true;
+            } else {
+                in_alternatives = false;
+            }
+            flush_option(cur.take(), &mut entries);
+            continue;
+        }
+
+        if !in_alternatives {
+            continue;
+        }
+
+        if trimmed.starts_with("### ") || trimmed.starts_with("#### ") {
+            flush_option(cur.take(), &mut entries);
+            let heading = trimmed.trim_start_matches('#').trim();
+            let upper = heading.to_uppercase();
+            let is_chosen = upper.contains("(CHOSEN)") || upper.contains("[CHOSEN]");
+            let is_rejected = upper.contains("(REJECTED)") || upper.contains("[REJECTED]");
+
+            let clean_name = heading
+                .replace("(REJECTED)", "")
+                .replace("[REJECTED]", "")
+                .replace("(CHOSEN)", "")
+                .replace("[CHOSEN]", "")
+                .trim()
+                .to_string();
+
+            cur = Some(CurrentOption {
+                name: clean_name,
+                is_chosen,
+                is_rejected,
+                description: Vec::new(),
+                trap: Vec::new(),
+                why_rejected: Vec::new(),
+                current_target: 0,
+            });
+            continue;
+        }
+
+        if let Some(ref mut opt) = cur {
+            let is_bullet = trimmed.starts_with("- ") || trimmed.starts_with("* ");
+            let content_line = if is_bullet {
+                trimmed[2..].trim()
+            } else {
+                trimmed
+            };
+
+            let lower = content_line.to_lowercase();
+
+            if is_bullet && (lower.contains("strongest argument")
+                || lower.contains("luận điểm mạnh nhất")
+                || lower.contains("lập luận mạnh nhất")
+                || lower.contains("seductive trap")
+                || lower.contains("cái bẫy hấp dẫn")
+                || lower.contains("bẫy hấp dẫn"))
+            {
+                opt.current_target = 2; // trap
+                let val = extract_bullet_value(content_line);
+                if !val.is_empty() {
+                    opt.trap.push(val);
+                }
+            } else if is_bullet && (lower.contains("why rejected")
+                || lower.contains("vì sao loại bỏ")
+                || lower.contains("lý do loại bỏ")
+                || lower.contains("lý do bị loại bỏ")
+                || lower.contains("lý do bị bác bỏ")
+                || lower.contains("điểm tử huyệt"))
+            {
+                opt.current_target = 3; // why_rejected
+                opt.is_rejected = true;
+                let val = extract_bullet_value(content_line);
+                if !val.is_empty() {
+                    opt.why_rejected.push(val);
+                }
+            } else if is_bullet && (lower.contains("description") || lower.contains("mô tả")) {
+                opt.current_target = 1; // desc
+                let val = extract_bullet_value(content_line);
+                if !val.is_empty() {
+                    opt.description.push(val);
+                }
+            } else if is_bullet && (lower.contains("why chosen") || lower.contains("vì sao chọn")) {
+                opt.current_target = 0;
+                opt.is_chosen = true;
+            } else if is_bullet {
+                opt.current_target = 0;
+            } else if !trimmed.is_empty() {
+                match opt.current_target {
+                    1 => opt.description.push(trimmed.to_string()),
+                    2 => opt.trap.push(trimmed.to_string()),
+                    3 => opt.why_rejected.push(trimmed.to_string()),
+                    _ => {}
+                }
+            }
+        }
+    }
+
+    flush_option(cur, &mut entries);
+    entries
+}
+
+// 扫描项目中所有 design.md 并提取负向决策（Alternatives Considered / Rejected options）
+pub fn scan_pitfalls(project_dir: &Path) -> Vec<PitfallEntry> {
+    let (tasks, _) = scan_tasks_with_archived(project_dir);
+    let mut pitfalls = Vec::new();
+    for task in tasks {
+        let task_full_dir = if task.dir.starts_with("research/") || task.dir.starts_with("research\\") {
+            project_dir.join(".trellis").join(&task.dir)
+        } else {
+            project_dir.join(".trellis").join("tasks").join(&task.dir)
+        };
+        let design_file = task_full_dir.join("design.md");
+        if design_file.is_file() {
+            if let Ok(content) = fs::read_to_string(&design_file) {
+                let rel_path = relative_to(project_dir, &design_file);
+                let task_pitfalls = parse_pitfalls_from_markdown(&content, &task.id, &task.title, &rel_path);
+                pitfalls.extend(task_pitfalls);
+            }
+        }
+    }
+    pitfalls
+}
+
 pub fn project_info(project_dir: &Path) -> ProjectInfo {
     let (tasks, _) = scan_tasks(project_dir);
     let last = tasks.iter().map(|t| t.mtime).max().unwrap_or(0);
@@ -2052,5 +2247,37 @@ paths: [src/index.ts, 'test/*.test.js', "docs/**"]
         let task = support.unwrap();
         assert_eq!(task.title, "Support Lean Trellis in Trellis Card");
         assert!(task.subtasks.len() > 0);
+    }
+
+    #[test]
+    fn test_parse_and_scan_pitfalls() {
+        let md = r#"
+# Technical Design
+
+## 3. Alternatives Considered & Trade-offs
+
+### Option A: Native React Components (CHOSEN)
+- **Description:** Summary
+- **Why chosen:** Good fit
+
+### Option B: Nhúng board.html của DeepSeek vào Iframe (REJECTED)
+- **Description:** Copy nguyên file
+- **Luận điểm mạnh nhất ủng hộ phương án này:** Cực kỳ nhanh, không cần code lại UI
+- **Vì sao loại bỏ:** Iframe gặp vấn đề bảo mật trong Tauri
+
+### Option C: Dùng thư viện Graph 3D nặng (REJECTED)
+- **Strongest argument for this option:** Rất đẹp mắt
+- **Why rejected:** Tốn CPU/GPU không cần thiết
+"#;
+        let pitfalls = parse_pitfalls_from_markdown(md, "test-task", "Test Task", "test/design.md");
+        assert_eq!(pitfalls.len(), 2);
+        assert_eq!(pitfalls[0].task_id, "test-task");
+        assert!(pitfalls[0].option_name.contains("Option B"));
+        assert_eq!(pitfalls[0].seductive_trap, "Cực kỳ nhanh, không cần code lại UI");
+        assert_eq!(pitfalls[0].why_rejected, "Iframe gặp vấn đề bảo mật trong Tauri");
+
+        assert!(pitfalls[1].option_name.contains("Option C"));
+        assert_eq!(pitfalls[1].seductive_trap, "Rất đẹp mắt");
+        assert_eq!(pitfalls[1].why_rejected, "Tốn CPU/GPU không cần thiết");
     }
 }

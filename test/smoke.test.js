@@ -29,4 +29,16 @@ test("smoke test: build output contains required files", () => {
   assert.ok(jsContent.includes("Verification / Review"), "bundle should contain Verification / Review column");
   assert.ok(jsContent.includes("Implement task"), "bundle should support Implement task copy prompt");
   assert.ok(jsContent.includes("Check task"), "bundle should support Check task copy prompt");
+  assert.ok(
+    jsContent.includes("Kho bài học tránh bẫy") || jsContent.includes("Pitfalls"),
+    "bundle should include DeepSeek Pitfalls Dossier view"
+  );
+  assert.ok(
+    jsContent.includes("Knowledge Graph"),
+    "bundle should include Knowledge Graph view"
+  );
+  assert.ok(
+    jsContent.includes("Timeline"),
+    "bundle should include Evolution Timeline view"
+  );
 });

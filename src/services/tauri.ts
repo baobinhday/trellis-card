@@ -1,4 +1,4 @@
-import { ProjectInfo, TasksPayload, TaskDetail, TrellisTask, SpecOut, RelationsPayload } from "../types";
+import { ProjectInfo, TasksPayload, TaskDetail, TrellisTask, SpecOut, RelationsPayload, PitfallEntry } from "../types";
 
 // Check if running inside Tauri webview
 export const isTauri = (): boolean => {
@@ -79,6 +79,10 @@ export async function listSpecs(project: string): Promise<SpecOut[]> {
 // List task dependencies and relation graphs
 export async function listRelations(project: string): Promise<RelationsPayload> {
   return await invokeTauri<RelationsPayload>("list_relations", { project });
+}
+
+export async function listPitfalls(project: string): Promise<PitfallEntry[]> {
+  return await invokeTauri<PitfallEntry[]>("list_pitfalls", { project });
 }
 
 // Listen to real-time file watcher & hook changes across tasks
@@ -256,6 +260,9 @@ function getMockResponse<T>(cmd: string, args?: Record<string, unknown>): T {
       specGroups: [],
       prdGroups: [],
     } as unknown as T;
+  }
+  if (cmd === "list_pitfalls") {
+    return [] as unknown as T;
   }
   if (cmd === "archive_task" || cmd === "update_task_status" || cmd === "toggle_subtask") {
     return true as unknown as T;

@@ -8,8 +8,12 @@ import {
   RefreshCw,
   BookOpen,
   ChevronDown,
+  Kanban,
+  Network,
+  ShieldAlert,
+  Clock,
 } from "lucide-react";
-import { ProjectInfo } from "../types";
+import { ProjectInfo, ActiveView } from "../types";
 
 interface HeaderProps {
   project: ProjectInfo | null;
@@ -26,6 +30,8 @@ interface HeaderProps {
   isLoading: boolean;
   isLiveSynced?: boolean;
   onOpenSpecs?: () => void;
+  activeView?: ActiveView;
+  onViewChange?: (view: ActiveView) => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -43,6 +49,8 @@ export const Header: React.FC<HeaderProps> = ({
   isLoading,
   isLiveSynced = false,
   onOpenSpecs,
+  activeView = "kanban",
+  onViewChange,
 }) => {
   if (!project) {
     return (
@@ -109,6 +117,64 @@ export const Header: React.FC<HeaderProps> = ({
             </button>
           )}
         </div>
+
+        {/* View Switcher Tabs */}
+        {onViewChange && (
+          <div className="flex items-center p-0.5 bg-gray-100 dark:bg-gray-800/90 rounded-lg border border-gray-200/60 dark:border-gray-700/60">
+            <button
+              type="button"
+              onClick={() => onViewChange("kanban")}
+              title="Kanban Tasks Board"
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-all ${
+                activeView === "kanban"
+                  ? "bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-xs font-semibold"
+                  : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200"
+              }`}
+            >
+              <Kanban className="w-3.5 h-3.5 text-indigo-500" />
+              <span className="hidden lg:inline">Kanban</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => onViewChange("graph")}
+              title="Knowledge Graph (Spec ⟷ Task Network)"
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-all ${
+                activeView === "graph"
+                  ? "bg-white dark:bg-gray-700 text-indigo-600 dark:text-indigo-400 shadow-xs font-semibold"
+                  : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200"
+              }`}
+            >
+              <Network className="w-3.5 h-3.5 text-indigo-500" />
+              <span className="hidden lg:inline">Graph</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => onViewChange("pitfalls")}
+              title="Pitfalls Dossier (Kho bài học tránh bẫy)"
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-all ${
+                activeView === "pitfalls"
+                  ? "bg-white dark:bg-gray-700 text-amber-600 dark:text-amber-400 shadow-xs font-semibold"
+                  : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200"
+              }`}
+            >
+              <ShieldAlert className="w-3.5 h-3.5 text-amber-500" />
+              <span className="hidden lg:inline">Pitfalls</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => onViewChange("timeline")}
+              title="Timeline (Tiến trình theo session)"
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-all ${
+                activeView === "timeline"
+                  ? "bg-white dark:bg-gray-700 text-purple-600 dark:text-purple-400 shadow-xs font-semibold"
+                  : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200"
+              }`}
+            >
+              <Clock className="w-3.5 h-3.5 text-purple-500" />
+              <span className="hidden lg:inline">Timeline</span>
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Right: Search, Filter, Archive Toggle, Refresh */}

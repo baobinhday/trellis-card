@@ -2,9 +2,12 @@ import React, { useState, useEffect, useCallback, useRef } from "react";
 import { Sidebar } from "./components/Sidebar";
 import { Header } from "./components/Header";
 import { KanbanBoard } from "./components/KanbanBoard";
+import { PitfallsView } from "./components/PitfallsView";
+import { KnowledgeGraphView } from "./components/KnowledgeGraphView";
+import { TimelineView } from "./components/TimelineView";
 import { TaskDetailModal } from "./components/TaskDetailModal";
 import { SpecExplorerModal } from "./components/SpecExplorerModal";
-import { ProjectInfo, TrellisTask } from "./types";
+import { ProjectInfo, TrellisTask, ActiveView } from "./types";
 import {
   listProjects,
   listTasks,
@@ -27,6 +30,8 @@ export const App: React.FC = () => {
   const [activeTasks, setActiveTasks] = useState<TrellisTask[]>([]);
   const [archivedTasks, setArchivedTasks] = useState<TrellisTask[]>([]);
   const [showArchived, setShowArchived] = useState<boolean>(false);
+  const [activeView, setActiveView] = useState<ActiveView>("kanban");
+  const [refreshKey, setRefreshKey] = useState<number>(0);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [priorityFilter, setPriorityFilter] = useState<string>("ALL");
@@ -83,6 +88,7 @@ export const App: React.FC = () => {
       setSelectedProject((prev) =>
         prev && prev.path === projectPath ? { ...prev, taskCount: count } : prev
       );
+      setRefreshKey((k) => k + 1);
     } catch (err) {
       console.error("Error loading tasks:", err);
     } finally {
@@ -378,17 +384,41 @@ export const App: React.FC = () => {
           isLoading={isLoading}
           isLiveSynced={isLiveSynced}
           onOpenSpecs={() => handleOpenSpec()}
+          activeView={activeView}
+          onViewChange={setActiveView}
         />
 
         {selectedProject ? (
-          <KanbanBoard
-            tasks={displayedTasks}
-            onSelectTask={(task) => setSelectedTask(task)}
-            searchQuery={searchQuery}
-            priorityFilter={priorityFilter}
-            onArchiveTask={handleArchiveTask}
-            onMoveTask={handleMoveTask}
-          />
+          activeView === "kanban" ? (
+            <KanbanBoard
+              tasks={displayedTasks}
+              onSelectTask={(task) => setSelectedTask(task)}
+              searchQuery={searchQuery}
+              priorityFilter={priorityFilter}
+              onArchiveTask={handleArchiveTask}
+              onMoveTask={handleMoveTask}
+            />
+          ) : activeView === "graph" ? (
+            <KnowledgeGraphView
+              projectPath={selectedProject.path}
+              onSelectTaskById={handleSelectTaskById}
+              onOpenSpec={(spec) => handleOpenSpec(spec)}
+              refreshTrigger={refreshKey}
+            />
+          ) : activeView === "pitfalls" ? (
+            <PitfallsView
+              projectPath={selectedProject.path}
+              onOpenInEditor={(p) => openInEditor(p)}
+              onSelectTaskById={handleSelectTaskById}
+              refreshTrigger={refreshKey}
+            />
+          ) : (
+            <TimelineView
+              tasks={displayedTasks}
+              onSelectTask={(task) => setSelectedTask(task)}
+              onOpenInEditor={(p) => openInEditor(p)}
+            />
+          )
         ) : (
           <div className="flex-1 flex flex-col items-center justify-center text-center p-8 text-gray-500 dark:text-gray-400">
             <div className="w-16 h-16 rounded-2xl bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 flex items-center justify-center mb-4 shadow-sm">
