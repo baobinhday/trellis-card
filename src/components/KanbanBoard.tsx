@@ -2,9 +2,9 @@ import React from "react";
 import {
   ClipboardList,
   PlayCircle,
-  AlertCircle,
   CheckCircle2,
   Inbox,
+  FileCheck2,
 } from "lucide-react";
 import { TrellisTask, KanbanColumnDef, KanbanColumnId } from "../types";
 import { TaskCard } from "./TaskCard";
@@ -22,7 +22,7 @@ const COLUMNS: KanbanColumnDef[] = [
   {
     id: "planning",
     title: "Planning / Backlog",
-    description: "Tasks in spec planning & brainstorming",
+    description: "Tasks in requirements, design & ready to code",
     accentColor: "text-blue-600 dark:text-blue-400",
     bgLight: "bg-blue-50/70",
     borderLight: "border-blue-200/80",
@@ -41,18 +41,18 @@ const COLUMNS: KanbanColumnDef[] = [
   },
   {
     id: "blocked",
-    title: "Verification / Blocked",
-    description: "Tasks pending review, check, or blocked",
-    accentColor: "text-rose-600 dark:text-rose-400",
-    bgLight: "bg-rose-50/70",
-    borderLight: "border-rose-200/80",
-    bgDark: "dark:bg-rose-950/20",
-    borderDark: "dark:border-rose-900/40",
+    title: "Verification / Review",
+    description: "Tasks verifying acceptance criteria or blocked",
+    accentColor: "text-purple-600 dark:text-purple-400",
+    bgLight: "bg-purple-50/70",
+    borderLight: "border-purple-200/80",
+    bgDark: "dark:bg-purple-950/20",
+    borderDark: "dark:border-purple-900/40",
   },
   {
     id: "completed",
-    title: "Done / Archived",
-    description: "Completed and archived tasks",
+    title: "Done",
+    description: "Accepted and completed tasks in this project",
     accentColor: "text-emerald-600 dark:text-emerald-400",
     bgLight: "bg-emerald-50/70",
     borderLight: "border-emerald-200/80",
@@ -106,7 +106,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
       case "in_progress":
         return <PlayCircle className="w-4 h-4 text-amber-500" />;
       case "blocked":
-        return <AlertCircle className="w-4 h-4 text-rose-500" />;
+        return <FileCheck2 className="w-4 h-4 text-purple-500" />;
       case "completed":
         return <CheckCircle2 className="w-4 h-4 text-emerald-500" />;
     }

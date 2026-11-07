@@ -250,7 +250,7 @@ fn infer_phase(status: &str, a: &Artifacts) -> Phase {
     };
     match status {
         "completed" | "done" => p("done", "Completed · Ready to archive", false),
-        "review" => p("review", "In Review", false),
+        "review" => p("verify", "Verification · Ready to accept", false),
         "blocked" => p("halt", "Blocked", true),
         "in_progress" => {
             if a.report_count > 0 {
@@ -260,12 +260,12 @@ fn infer_phase(status: &str, a: &Artifacts) -> Phase {
             }
         }
         "planning" => {
-            if a.impl_entries > 0 {
-                p("ready", "Planning · Ready to start", false) // 规范注入已配
+            if a.implement || a.impl_entries > 0 {
+                p("ready", "Planning · Ready to start", false)
             } else if a.prd {
-                p("need-context", "Planning · Needs spec context", true) // ★ 最容易漏的一步
+                p("explore", "Planning · Exploring", false)
             } else {
-                p("explore", "Planning · Exploring", false) // Phase 1.0-1.1
+                p("explore", "Planning · Exploring", false)
             }
         }
         _ => p("unknown", status, false),
@@ -1077,6 +1077,7 @@ pub fn parse_lean_subtasks_and_status(
     let mut subtasks = Vec::new();
     let mut created_at = None;
     let mut explicit_status: Option<String> = None;
+    let mut prd_approved = false;
 
     if let Ok(prd_content) = fs::read_to_string(task_path.join("prd.md")) {
         for line in prd_content.lines() {
@@ -1097,15 +1098,14 @@ pub fn parse_lean_subtasks_and_status(
                 let val = rest.trim().trim_matches('*').trim().to_lowercase();
                 if val.contains("in_progress") || val.contains("in progress") {
                     explicit_status = Some("in_progress".to_string());
-                } else if val.contains("review") {
+                } else if val.contains("review") || val.contains("verification") {
                     explicit_status = Some("review".to_string());
                 } else if val.contains("blocked") {
                     explicit_status = Some("blocked".to_string());
-                } else if val.contains("approved")
-                    || val.contains("completed")
-                    || val.contains("done")
-                {
+                } else if val.contains("completed") || val.contains("done") {
                     explicit_status = Some("done".to_string());
+                } else if val.contains("approved") {
+                    prd_approved = true;
                 }
             }
         }
@@ -1115,6 +1115,22 @@ pub fn parse_lean_subtasks_and_status(
     if let Ok(content) = fs::read_to_string(&impl_path) {
         for line in content.lines() {
             let trimmed = line.trim();
+            let clean = trimmed.trim_matches('*').trim();
+            if explicit_status.is_none() {
+                if let Some(rest) = clean.strip_prefix("Status:") {
+                    let val = rest.trim().trim_matches('*').trim().to_lowercase();
+                    if val.contains("in_progress") || val.contains("in progress") {
+                        explicit_status = Some("in_progress".to_string());
+                    } else if val.contains("review") || val.contains("verification") {
+                        explicit_status = Some("review".to_string());
+                    } else if val.contains("blocked") {
+                        explicit_status = Some("blocked".to_string());
+                    } else if val.contains("completed") || val.contains("done") {
+                        explicit_status = Some("done".to_string());
+                    }
+                }
+            }
+
             let (is_checked, is_unchecked, rest) = if let Some(r) = trimmed
                 .strip_prefix("- [x] ")
                 .or_else(|| trimmed.strip_prefix("- [X] "))
@@ -1165,9 +1181,12 @@ pub fn parse_lean_subtasks_and_status(
         };
         ("done".to_string(), prog)
     } else if total > 0 && done_count == total {
-        ("done".to_string(), 1.0)
+        let s = explicit_status.unwrap_or_else(|| "done".to_string());
+        (s, 1.0)
     } else if done_count > 0 {
         ("in_progress".to_string(), done_count as f64 / total as f64)
+    } else if total > 0 && done_count == 0 {
+        ("planning".to_string(), 0.0)
     } else if let Some(ref exp) = explicit_status {
         let prog = match exp.as_str() {
             "done" => 1.0,
@@ -1177,7 +1196,8 @@ pub fn parse_lean_subtasks_and_status(
         };
         (exp.clone(), prog)
     } else {
-        ("planning".to_string(), 0.1)
+        let prog = if prd_approved { 0.1 } else { 0.05 };
+        ("planning".to_string(), prog)
     };
 
     let (lane, kind) = crate::progress::lane_model(&status);
@@ -1958,6 +1978,27 @@ paths: [src/index.ts, 'test/*.test.js', "docs/**"]
         assert_eq!(t.status, "in_progress");
         assert_eq!(t.created_at.as_deref(), Some("2026-11-06"));
 
+        // Test new feature with PRD approved but 0 subtasks completed
+        let new_task_dir = root.join(".trellis/research/new-approved-feature");
+        fs::create_dir_all(&new_task_dir).unwrap();
+        fs::write(
+            new_task_dir.join("prd.md"),
+            "# PRD: New Approved Feature\n\n**Status:** Approved\n**Date:** 2026-11-07\n",
+        )
+        .unwrap();
+        fs::write(
+            new_task_dir.join("implement.md"),
+            "# Implementation Plan\n\n- [ ] Step 1: Design\n- [ ] Step 2: Build\n",
+        )
+        .unwrap();
+
+        let (tasks, _) = scan_tasks(&root);
+        let new_t = tasks.iter().find(|t| t.id == "new-approved-feature").unwrap();
+        assert_eq!(new_t.status, "planning");
+        assert_eq!(new_t.lane, 0); // Lane 0: Planning / Backlog
+        assert_eq!(new_t.progress, 0.0);
+        assert_eq!(new_t.phase.id, "ready");
+
         // Test completed: all checked
         fs::write(
             task_dir.join("implement.md"),
@@ -1965,9 +2006,10 @@ paths: [src/index.ts, 'test/*.test.js', "docs/**"]
         )
         .unwrap();
         let (tasks, _) = scan_tasks(&root);
-        assert_eq!(tasks[0].status, "done");
-        assert_eq!(tasks[0].lane, 3); // Lane 3: done
-        assert_eq!(tasks[0].progress, 1.0);
+        let t_done = tasks.iter().find(|t| t.id == "my-feature").unwrap();
+        assert_eq!(t_done.status, "done");
+        assert_eq!(t_done.lane, 3); // Lane 3: done
+        assert_eq!(t_done.progress, 1.0);
 
         // Test archived lean task
         let archive_task = root.join(".trellis/research/archive/2026-10/old-feature");

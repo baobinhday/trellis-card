@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import {
   FileText,
   CheckSquare,
@@ -6,6 +6,8 @@ import {
   Layers,
   GitFork,
   GitBranch,
+  MessageSquareCode,
+  Check,
 } from "lucide-react";
 import { TrellisTask } from "../types";
 
@@ -16,6 +18,8 @@ interface TaskCardProps {
 }
 
 export const TaskCard: React.FC<TaskCardProps> = ({ task, onClick, onArchive }) => {
+  const [copiedPrompt, setCopiedPrompt] = useState(false);
+
   const getPriorityBadge = (priority: string) => {
     switch (priority) {
       case "P0":
@@ -32,6 +36,34 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, onClick, onArchive }) 
 
   const completedSubtasks = task.subtasks?.filter((s) => s.status === "completed" || s.status === "done").length || 0;
   const totalSubtasks = task.subtasks?.length || 0;
+
+  // Determine conversational prompt for Lean Trellis chat workflow
+  const taskSlug = (task.dir || task.id).replace(/^research[/\\]/, "");
+  let promptActionLabel = "";
+  let promptText = "";
+
+  if (task.status === "planning") {
+    promptActionLabel = "Implement";
+    promptText = `Implement task ${taskSlug}`;
+  } else if (task.status === "in_progress") {
+    promptActionLabel = "Check";
+    promptText = `Check task ${taskSlug}`;
+  } else if (task.status === "blocked" || task.status === "review" || task.status === "check") {
+    promptActionLabel = "Check";
+    promptText = `Check task ${taskSlug}`;
+  }
+
+  const handleCopyPrompt = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!promptText) return;
+    try {
+      await navigator.clipboard.writeText(promptText);
+      setCopiedPrompt(true);
+      setTimeout(() => setCopiedPrompt(false), 1500);
+    } catch (err) {
+      console.error("Failed to copy prompt to clipboard:", err);
+    }
+  };
 
   return (
     <div
@@ -180,15 +212,38 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, onClick, onArchive }) 
           )}
         </div>
 
-        {task.artifacts?.implEntries !== undefined && task.artifacts.implEntries > 0 && (
-          <span
-            title="Spec context rules attached"
-            className="flex items-center gap-0.5 text-indigo-500 dark:text-indigo-400 text-[10px]"
-          >
-            <FileText className="w-2.5 h-2.5" />
-            <span>{task.artifacts.implEntries} specs</span>
-          </span>
-        )}
+        <div className="flex items-center gap-1.5">
+          {task.artifacts?.implEntries !== undefined && task.artifacts.implEntries > 0 && (
+            <span
+              title="Spec context rules attached"
+              className="flex items-center gap-0.5 text-indigo-500 dark:text-indigo-400 text-[10px]"
+            >
+              <FileText className="w-2.5 h-2.5" />
+              <span>{task.artifacts.implEntries} specs</span>
+            </span>
+          )}
+
+          {!task.archived && task.status !== "completed" && task.status !== "done" && promptText && (
+            <button
+              type="button"
+              onClick={handleCopyPrompt}
+              title={`Copy prompt: "${promptText}"`}
+              className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-50 hover:bg-indigo-50 dark:bg-gray-800/80 dark:hover:bg-indigo-950/50 text-gray-600 hover:text-indigo-600 dark:text-gray-400 dark:hover:text-indigo-300 border border-gray-200/60 dark:border-gray-700/60 transition-colors"
+            >
+              {copiedPrompt ? (
+                <>
+                  <Check className="w-2.5 h-2.5 text-emerald-500" />
+                  <span className="text-emerald-600 dark:text-emerald-400 font-semibold">Copied!</span>
+                </>
+              ) : (
+                <>
+                  <MessageSquareCode className="w-2.5 h-2.5" />
+                  <span>{promptActionLabel}</span>
+                </>
+              )}
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );
