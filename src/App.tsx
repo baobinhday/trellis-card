@@ -88,7 +88,6 @@ export const App: React.FC = () => {
       setSelectedProject((prev) =>
         prev && prev.path === projectPath ? { ...prev, taskCount: count } : prev
       );
-      setRefreshKey((k) => k + 1);
     } catch (err) {
       console.error("Error loading tasks:", err);
     } finally {
@@ -169,6 +168,7 @@ export const App: React.FC = () => {
           await loadTasks(currentPath, { silent: true });
         }
         await refreshProjects({ silent: true });
+        setRefreshKey((k) => k + 1);
       }, 250);
     }).then((unlisten) => {
       cleanup = unlisten;
@@ -354,6 +354,7 @@ export const App: React.FC = () => {
           if (selectedProject) {
             await loadTasks(selectedProject.path);
           }
+          setRefreshKey((k) => k + 1);
         }}
         isLoading={isLoading}
         darkMode={darkMode}
@@ -380,6 +381,7 @@ export const App: React.FC = () => {
               await loadTasks(selectedProject.path);
             }
             await refreshProjects();
+            setRefreshKey((k) => k + 1);
           }}
           isLoading={isLoading}
           isLiveSynced={isLiveSynced}

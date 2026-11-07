@@ -28,6 +28,46 @@ interface TimelineEvent {
   task: TrellisTask;
 }
 
+const parseDateToTimestamp = (dateStr?: string, fallback = 0): number => {
+  if (!dateStr) return fallback;
+  const match = dateStr.trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (match) {
+    const year = parseInt(match[1], 10);
+    const month = parseInt(match[2], 10) - 1;
+    const day = parseInt(match[3], 10);
+    return new Date(year, month, day, 12, 0, 0).getTime();
+  }
+  const time = new Date(dateStr).getTime();
+  return isNaN(time) ? fallback : time;
+};
+
+const formatEventTimeOrDate = (ev: TimelineEvent): string => {
+  if (!ev.dateStr) return "";
+  const d = new Date(ev.timestamp);
+  if (isNaN(d.getTime())) return ev.dateStr;
+
+  // Kiểm tra xem dateStr có giờ cụ thể hay không (ví dụ "2026-10-28" là date-only, không có giờ)
+  const isDateOnly = /^\d{4}-\d{2}-\d{2}$/.test(ev.dateStr.trim());
+  const hasTime =
+    !isDateOnly &&
+    (ev.dateStr.includes("T") || ev.dateStr.includes(":")) &&
+    !(d.getHours() === 0 && d.getMinutes() === 0 && d.getSeconds() === 0);
+
+  if (hasTime) {
+    return d.toLocaleTimeString("vi-VN", {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  }
+
+  // Không có giờ thì bỏ giờ đi, để ngày thôi
+  return d.toLocaleDateString("vi-VN", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
+};
+
 export const TimelineView: React.FC<TimelineViewProps> = ({
   tasks,
   onSelectTask,
@@ -42,8 +82,8 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
     tasks.forEach((t) => {
       // Completed event
       if (t.completedAt) {
-        const time = new Date(t.completedAt).getTime();
-        if (!isNaN(time)) {
+        const time = parseDateToTimestamp(t.completedAt);
+        if (time > 0) {
           list.push({
             id: `completed-${t.id}-${time}`,
             timestamp: time,
@@ -59,7 +99,7 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
       // Sessions events
       if (t.sessions && t.sessions.length > 0) {
         t.sessions.forEach((s, idx) => {
-          const time = s.lastActive ? new Date(s.lastActive).getTime() : t.mtime;
+          const time = s.lastActive ? parseDateToTimestamp(s.lastActive, t.mtime) : t.mtime;
           list.push({
             id: `session-${t.id}-${s.platform}-${idx}`,
             timestamp: time,
@@ -75,8 +115,8 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
 
       // Created event
       if (t.createdAt) {
-        const time = new Date(t.createdAt).getTime();
-        if (!isNaN(time)) {
+        const time = parseDateToTimestamp(t.createdAt);
+        if (time > 0) {
           list.push({
             id: `created-${t.id}-${time}`,
             timestamp: time,
@@ -272,12 +312,7 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
 
                       <div className="flex items-center gap-2 shrink-0">
                         <span className="text-[10px] text-gray-400 dark:text-gray-500 font-mono">
-                          {isNaN(new Date(ev.timestamp).getTime())
-                            ? ""
-                            : new Date(ev.timestamp).toLocaleTimeString("vi-VN", {
-                                hour: "2-digit",
-                                minute: "2-digit",
-                              })}
+                          {formatEventTimeOrDate(ev)}
                         </span>
                         <ChevronRight className="w-4 h-4 text-gray-300 dark:text-gray-600 group-hover:text-purple-500 group-hover:translate-x-0.5 transition-all" />
                       </div>

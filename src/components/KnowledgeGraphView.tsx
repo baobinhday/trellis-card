@@ -54,23 +54,40 @@ export const KnowledgeGraphView: React.FC<KnowledgeGraphViewProps> = ({
 
   const containerRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
+  const hasLoadedRef = useRef<boolean>(false);
+  const activeFetchRef = useRef<boolean>(false);
 
-  const loadData = useCallback(async () => {
-    if (!projectPath) return;
-    setIsLoading(true);
-    try {
-      const data = await listRelations(projectPath);
-      setRelations(data);
-    } catch (err) {
-      console.error("Failed to load relations for graph:", err);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [projectPath]);
+  const loadData = useCallback(
+    async (isSilent = false) => {
+      if (!projectPath || activeFetchRef.current) return;
+      activeFetchRef.current = true;
+      if (!hasLoadedRef.current && !isSilent) {
+        setIsLoading(true);
+      }
+      try {
+        const data = await listRelations(projectPath);
+        setRelations(data);
+        hasLoadedRef.current = true;
+      } catch (err) {
+        console.error("Failed to load relations for graph:", err);
+      } finally {
+        setIsLoading(false);
+        activeFetchRef.current = false;
+      }
+    },
+    [projectPath]
+  );
 
   useEffect(() => {
-    loadData();
-  }, [loadData, refreshTrigger]);
+    hasLoadedRef.current = false;
+    loadData(false);
+  }, [projectPath, loadData]);
+
+  useEffect(() => {
+    if (refreshTrigger && hasLoadedRef.current) {
+      loadData(true);
+    }
+  }, [refreshTrigger, loadData]);
 
   // Build raw nodes & edges
   const { rawNodes, rawEdges } = useMemo(() => {
@@ -372,7 +389,7 @@ export const KnowledgeGraphView: React.FC<KnowledgeGraphViewProps> = ({
           </button>
 
           <button
-            onClick={loadData}
+            onClick={() => loadData(false)}
             disabled={isLoading}
             className="p-1.5 text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
           >

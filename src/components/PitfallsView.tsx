@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   ShieldAlert,
   Search,
@@ -27,25 +27,48 @@ export const PitfallsView: React.FC<PitfallsViewProps> = ({
 }) => {
   const [pitfalls, setPitfalls] = useState<PitfallEntry[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [taskFilter, setTaskFilter] = useState<string>("ALL");
+  const hasLoadedRef = useRef<boolean>(false);
+  const isFetchingRef = useRef<boolean>(false);
 
-  const loadPitfalls = useCallback(async () => {
-    if (!projectPath) return;
-    setIsLoading(true);
-    try {
-      const data = await listPitfalls(projectPath);
-      setPitfalls(data);
-    } catch (err) {
-      console.error("Failed to load pitfalls:", err);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [projectPath]);
+  const loadPitfalls = useCallback(
+    async (isSilent = false) => {
+      if (!projectPath || isFetchingRef.current) return;
+      isFetchingRef.current = true;
+
+      if (!hasLoadedRef.current && !isSilent) {
+        setIsLoading(true);
+      } else {
+        setIsRefreshing(true);
+      }
+
+      try {
+        const data = await listPitfalls(projectPath);
+        setPitfalls(data);
+        hasLoadedRef.current = true;
+      } catch (err) {
+        console.error("Failed to load pitfalls:", err);
+      } finally {
+        setIsLoading(false);
+        setIsRefreshing(false);
+        isFetchingRef.current = false;
+      }
+    },
+    [projectPath]
+  );
 
   useEffect(() => {
-    loadPitfalls();
-  }, [loadPitfalls, refreshTrigger]);
+    hasLoadedRef.current = false;
+    loadPitfalls(false);
+  }, [projectPath, loadPitfalls]);
+
+  useEffect(() => {
+    if (refreshTrigger && hasLoadedRef.current) {
+      loadPitfalls(true);
+    }
+  }, [refreshTrigger, loadPitfalls]);
 
   // Unique task ids for filter dropdown
   const uniqueTasks = Array.from(
@@ -88,12 +111,12 @@ export const PitfallsView: React.FC<PitfallsViewProps> = ({
 
           <div className="flex items-center gap-2 self-start sm:self-auto">
             <button
-              onClick={loadPitfalls}
-              disabled={isLoading}
+              onClick={() => loadPitfalls(false)}
+              disabled={isLoading || isRefreshing}
               title="Tải lại danh sách pitfalls"
               className="p-1.5 text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
             >
-              <RefreshCw className={`w-4 h-4 ${isLoading ? "animate-spin text-amber-600" : ""}`} />
+              <RefreshCw className={`w-4 h-4 ${isLoading || isRefreshing ? "animate-spin text-amber-600" : ""}`} />
             </button>
           </div>
         </div>
@@ -135,7 +158,7 @@ export const PitfallsView: React.FC<PitfallsViewProps> = ({
 
       {/* Main Content Area */}
       <div className="flex-1 overflow-y-auto p-6">
-        {isLoading ? (
+        {isLoading && pitfalls.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-64 text-gray-400">
             <RefreshCw className="w-6 h-6 animate-spin text-amber-500 mb-2" />
             <p className="text-xs">Đang quét các tài liệu design.md...</p>
