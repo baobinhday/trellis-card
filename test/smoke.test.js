@@ -10,9 +10,15 @@ test("smoke test: build output contains required files", () => {
   const indexPath = path.join(distDir, "index.html");
   assert.ok(fs.existsSync(indexPath), "dist/index.html should exist");
 
+  const pkgPath = path.resolve(process.cwd(), "package.json");
+  const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf-8"));
+
   const htmlContent = fs.readFileSync(indexPath, "utf-8");
   assert.ok(htmlContent.includes('id="root"'), "index.html should have #root mounting point");
-  assert.ok(htmlContent.includes("Trellis Kanban Board v1.0.0"), "index.html should have app title with version");
+  assert.ok(
+    htmlContent.includes(`Trellis Kanban Board v${pkg.version}`),
+    `index.html should have app title with version (expected v${pkg.version})`
+  );
 
   const assetsDir = path.join(distDir, "assets");
   assert.ok(fs.existsSync(assetsDir), "dist/assets directory should exist");
