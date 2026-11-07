@@ -12,7 +12,7 @@ test("smoke test: build output contains required files", () => {
 
   const htmlContent = fs.readFileSync(indexPath, "utf-8");
   assert.ok(htmlContent.includes('id="root"'), "index.html should have #root mounting point");
-  assert.ok(htmlContent.includes("Trellis Kanban Board"), "index.html should have app title");
+  assert.ok(htmlContent.includes("Trellis Kanban Board v1.0.0"), "index.html should have app title with version");
 
   const assetsDir = path.join(distDir, "assets");
   assert.ok(fs.existsSync(assetsDir), "dist/assets directory should exist");

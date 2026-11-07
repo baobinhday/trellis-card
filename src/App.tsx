@@ -8,6 +8,7 @@ import { TimelineView } from "./components/TimelineView";
 import { TaskDetailModal } from "./components/TaskDetailModal";
 import { SpecExplorerModal } from "./components/SpecExplorerModal";
 import { ProjectInfo, TrellisTask, ActiveView } from "./types";
+import packageJson from "../package.json";
 import {
   listProjects,
   listTasks,
@@ -46,6 +47,11 @@ export const App: React.FC = () => {
     );
   });
   const [isLiveSynced] = useState<boolean>(isTauri());
+
+  // App window title with version
+  useEffect(() => {
+    document.title = `Trellis Kanban Board v${packageJson.version}`;
+  }, []);
 
   // Dark mode effect
   useEffect(() => {

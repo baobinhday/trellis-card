@@ -21,6 +21,9 @@ console.log('Updated package.json');
 const tauriPath = 'src-tauri/tauri.conf.json';
 const tauri = JSON.parse(fs.readFileSync(tauriPath, 'utf8'));
 tauri.version = version;
+if (tauri.app && Array.isArray(tauri.app.windows) && tauri.app.windows.length > 0) {
+  tauri.app.windows[0].title = `Trellis Kanban Board v${version}`;
+}
 fs.writeFileSync(tauriPath, JSON.stringify(tauri, null, 2) + '\n');
 console.log('Updated src-tauri/tauri.conf.json');
 
@@ -30,3 +33,12 @@ let cargo = fs.readFileSync(cargoPath, 'utf8');
 cargo = cargo.replace(/^version\s*=\s*"[^"]+"/m, `version = "${version}"`);
 fs.writeFileSync(cargoPath, cargo);
 console.log('Updated src-tauri/Cargo.toml');
+
+// 4. Update index.html
+const indexPath = 'index.html';
+if (fs.existsSync(indexPath)) {
+  let indexHtml = fs.readFileSync(indexPath, 'utf8');
+  indexHtml = indexHtml.replace(/<title>Trellis Kanban Board.*?<\/title>/, `<title>Trellis Kanban Board v${version}</title>`);
+  fs.writeFileSync(indexPath, indexHtml);
+  console.log('Updated index.html');
+}

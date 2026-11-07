@@ -15,7 +15,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "Trellis Kanban Board",
+        "title": "Trellis Kanban Board v1.0.0",
         "width": 1200,
         "height": 800,
         "resizable": true,
