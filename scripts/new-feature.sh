@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# scripts/new-feature.sh - Tạo nhanh thư mục feature và các file template chuẩn cho Lean Trellis Workflow
+# scripts/new-feature.sh - Khởi tạo an toàn chủ đề tính năng cho Lean Trellis Workflow
+# Tuân thủ triết lý DeepSeek Living Document: Không bao giờ ghi đè làm mất tài liệu cũ.
 set -euo pipefail
 
 if [ $# -lt 1 ]; then
@@ -47,6 +48,21 @@ else
   TARGET_DIR="$CURRENT_DIR/docs/features/$SLUG"
 fi
 
+# ==============================================================================
+# KIỂM TRA TỒN TẠI: BẢO VỆ DỮ LIỆU SỐNG (DeepSeek Anti-Overwrite Protection)
+# ==============================================================================
+if [ -d "$TARGET_DIR" ] && [ -f "$TARGET_DIR/prd.md" ]; then
+  echo "ℹ️  Chủ đề '$SLUG' đã tồn tại tại: $TARGET_DIR"
+  echo "🛡️  Triết lý DeepSeek Living Document: Bảo toàn 100% tài liệu cũ, không ghi đè."
+  echo "   AI sẽ tiến hóa tài liệu tại chỗ (In-Place Evolution):"
+  echo "   - Bổ sung Phase mới vào prd.md và design.md"
+  echo "   - Mở checklist mới trong implement.md và tóm tắt Phase đã qua"
+  echo "   - Không làm mất bất kỳ quyết định kỹ thuật hay Acceptance Criteria nào trước đó."
+  echo ""
+  echo "✅ Bạn có thể tiếp tục chat với AI để lên kế hoạch cho Phase tiếp theo!"
+  exit 0
+fi
+
 mkdir -p "$TARGET_DIR"
 
 # Hàm thay thế placeholder
@@ -64,7 +80,7 @@ render_template "$TEMPLATE_DIR/prd.template.md" "$TARGET_DIR/prd.md"
 render_template "$TEMPLATE_DIR/design.template.md" "$TARGET_DIR/design.md"
 render_template "$TEMPLATE_DIR/implement.template.md" "$TARGET_DIR/implement.md"
 
-echo " Khởi tạo thành công thư mục tính năng tại:"
+echo "✨ Khởi tạo thành công thư mục tính năng mới tại:"
 echo "   $TARGET_DIR"
 echo "Các file đã tạo:"
 echo "   - $TARGET_DIR/prd.md"

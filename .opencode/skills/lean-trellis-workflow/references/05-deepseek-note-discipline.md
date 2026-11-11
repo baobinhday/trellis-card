@@ -28,7 +28,25 @@ Never blur speculative reasoning with verified reality:
 
 ---
 
-## 4. Living Documents over Fragmented Notes (Anti-Rot)
+## 4. Living Documents over Fragmented Notes (Anti-Rot & Anti-Bloat)
 - **Zero Scratch Clutter:** Do not generate ephemeral, one-off summary files that rot within 24 hours.
-- **In-Place Updates:** Update living files directly (`.trellis/spec/`, `prd.md`, `design.md`, root `README.md`).
+- **In-Place Updates & Zero Overwrite:** When extending an existing topic, NEVER overwrite prior work. Update living files directly (`.trellis/spec/`, `prd.md`, `design.md`, `implement.md`).
 - **Clean Context Window:** Keep active notes compact. Promote lasting rules into `.trellis/spec/` and log sessions into the developer journal.
+
+---
+
+## 5. Document Evolution & Anti-Bloat Guardrails (Quản lý dung lượng file)
+Để tránh tình trạng file tích tụ qua nhiều Phase/Iteration trở nên quá dài (Context Bloat), AI tuân thủ **3 van xả áp**:
+
+1. **Promote to Spec (Rút tỉa quy ước bền vững):**
+   - Khi một Phase đã Completed, các kiến trúc cốt lõi, API contract, hoặc quy tắc DB được chuyển thành quy ước ngắn gọn trong `.trellis/spec/`.
+   - Trong `prd.md` và `design.md`, thay vì lưu lại toàn bộ chi tiết triển khai cũ, chỉ cần giữ lại 1 dòng tóm tắt và trỏ link:
+     > `*Phase 1 (Completed): Core contracts codified in .trellis/spec/<domain>/...*`
+
+2. **Compaction Threshold (< 300 dòng/file):**
+   - Giữ dung lượng mỗi file tài liệu (`prd.md`, `design.md`, `implement.md`) dưới ngưỡng **300 dòng**.
+   - Khi mở Phase mới trong `implement.md`, checklist chi tiết của Phase cũ được nén lại (dùng thẻ `<details>` hoặc tóm tắt) để nhường chỗ cho checklist của Phase hiện tại.
+
+3. **Tách Sub-topic khi vượt ngưỡng Scope:**
+   - Nếu tính năng mới mở rộng ra một module hoàn toàn độc lập (ví dụ từ `board-game-core` mở rộng sang `board-game-multiplayer`), AI chủ động đề xuất tạo một topic riêng rẽ thay vì nhồi nhét vào topic cũ, kèm liên kết tham chiếu:
+     > `Depends on: [.trellis/research/board-game-core/prd.md](../board-game-core/prd.md)`.

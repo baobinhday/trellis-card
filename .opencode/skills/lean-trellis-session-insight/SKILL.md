@@ -9,12 +9,19 @@ How to call `lean-trellis mem` and when that is the right move. Capability, not 
 
 ## What it is
 
-A local CLI that searches project Markdown and Claude Code, Codex, OpenCode V1, and Pi conversation logs. OpenCode V2 and CodeBuddy transcripts are not parsed; their saved project Markdown is still searchable. Documents are discovered automatically; no index service or configuration is needed. Nothing is uploaded.
+A local CLI that searches project Markdown and local AI conversation logs across **Claude Code**, **Codex**, **Devin CLI** (`~/.local/share/devin/cli/sessions.db`), **Grok**, **Pi**, and **Antigravity**. System prompt tags (`<system-reminder>`, `<workflow-state>`, `<INSTRUCTIONS>`, etc.) and tool noise are stripped automatically; user turns are weighted `3×` higher than assistant turns. Documents and sessions are discovered automatically; no index service or upload is used.
 
 ```bash
 lean-trellis mem recall "<topic or path>"
 # Only when the excerpts leave a question unresolved:
 lean-trellis mem read "<ref from recall>" "<another ref>"
+```
+
+For targeted conversation-only drill-downs or design-rationale recovery:
+```bash
+lean-trellis mem search "<topic>" [--platform claude|codex|devin|grok|pi|antigravity|all]
+lean-trellis mem context <session-id> --grep "<topic>" --turns 3 --around 1
+lean-trellis mem extract <session-id> --phase brainstorm
 ```
 
 Full flags: `lean-trellis mem help`.

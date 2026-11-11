@@ -20,17 +20,17 @@ Use `recall` for project knowledge and `read` for missing context. Full command 
 
 | Flag | Subcommands | Meaning |
 | ---- | ----------- | ------- |
-| `--platform claude\|codex\|opencode\|pi\|all` | recall / list / search / context / extract / projects | Default `all`; filters conversation sources. |
+| `--platform claude\|codex\|devin\|grok\|pi\|antigravity\|all` | recall / list / search / context / extract / projects | Default `all`; filters conversation sources. |
 | `--since YYYY-MM-DD` | list / search / context / extract / projects | Inclusive lower date bound. |
 | `--until YYYY-MM-DD` | list / search / context / extract / projects | Inclusive upper date bound. |
-| `--global` | list / search / context / extract | Include all projects' conversations, only for explicit cross-project requests. Not supported by `recall`. |
+| `--global` | list / search / context / extract | Include all projects' conversations, only for explicit cross-project requests. |
 | `--cwd <path>` | recall / read / list / search / context / extract | Select a project. Default is the current project. |
-| `--limit N` | recall / list / search / projects | Result limit. Defaults: recall `3`, list/search `50`, projects `30`. |
+| `--limit N` | recall / list / search / projects | Result limit. Defaults: recall `10`, list/search `20`. |
 | `--grep KW` | extract / context | Filter turns by keyword. |
 | `--turns N` | context | Hit turns to return. Default `3`. |
 | `--around N` | context | Surrounding turns per hit. Default `1`. |
-| `--max-chars N` | recall / read / context | Character budget. Defaults: recall stdout `3000`, read stdout `4000`, context text `6000`. |
-| `--include-children` | search / context | Merge OpenCode sub-agent sessions into parent. |
+| `--max-chars N` | recall / read / context | Character budget. Default context text `6000`. |
+| `--phase brainstorm\|implement\|all` | extract | Slice dialogue by `[create, start)` planning window vs implementation. |
 | `--json` | all | Machine-readable JSON. |
 
 ```bash

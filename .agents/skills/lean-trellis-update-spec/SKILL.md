@@ -1,16 +1,18 @@
 ---
 name: lean-trellis-update-spec
-description: "Captures durable contracts into .trellis/spec/ as short markdown, or updates the README or docs section that already states them. Use when a boundary should still hold next session, or when asked to refresh the project description from current code without turning plans into implemented features."
+description: "Captures durable contracts into .trellis/spec/ as short markdown, bootstraps project-specific specs from an existing codebase, or updates the README/docs section that already states them. Use when a boundary should still hold next session, when onboarding a brownfield repo ('Bootstrap specs', 'Khởi tạo spec cho dự án'), or when refreshing project conventions from current code."
 ---
 
-# Update Spec
+# Update & Bootstrap Spec
 
-Capture durable contracts and conventions into `.trellis/spec/` as short markdown.
+Capture durable contracts and conventions into `.trellis/spec/` as short, source-backed markdown.
 
 ## When
 
 - A debugging, implementation, or discussion produced a boundary that should still hold next session
 - Research in `.trellis/research/<topic>.md` is ready to promote
+- User asks to bootstrap or reverse-engineer `.trellis/spec/` from an existing codebase (e.g. *"Khởi tạo spec cho dự án"*, *"Bootstrap specs"*) — read [references/bootstrap-codebase-specs.md](references/bootstrap-codebase-specs.md) for the full single-agent codebase analysis and spec-writing workflow.
+- User asks to bootstrap or create design system specifications (e.g. *"Tạo spec design cho dự án"*, *"Khởi tạo design spec"*, *"Bootstrap design spec"*) — read [references/bootstrap-design-system-spec.md](references/bootstrap-design-system-spec.md) to inspect framework styling, tokens, and write `.trellis/spec/design-system.md`.
 
 ## Write
 

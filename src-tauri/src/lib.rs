@@ -187,17 +187,17 @@ struct RelationsPayload {
 }
 
 // 项目规范地图条目：规范路径、显示名、分类、填写状态、被引用次数、正文、约束路径规则
-#[derive(Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct SpecOut {
-    path: String,
-    name: String,
-    category: String,
-    filled: bool,
-    line_count: usize,
-    referenced_by: usize,
-    content: String,
-    paths: Vec<String>,
+pub(crate) struct SpecOut {
+    pub path: String,
+    pub name: String,
+    pub category: String,
+    pub filled: bool,
+    pub line_count: usize,
+    pub referenced_by: usize,
+    pub content: String,
+    pub paths: Vec<String>,
 }
 
 // ---------- 辅助 ----------
@@ -951,26 +951,59 @@ fn list_relations(state: State<AppState>, project: String) -> Result<RelationsPa
     })
 }
 
-// 项目通用规范地图：扫描 .trellis/spec/ 返回每个规范的路径、填写状态、
-// 被任务引用次数（trellis-update-spec 沉淀的团队知识资产）。
-#[tauri::command]
-fn list_specs(state: State<AppState>, project: String) -> Result<Vec<SpecOut>, String> {
-    if !is_allowed_project(&state, &project) {
-        return Err("Project not found in scanned directories".into());
-    }
-    let spec_root = expand(&project).join(".trellis").join("spec");
+pub(crate) fn scan_specs_in_root(spec_root: &Path) -> Vec<SpecOut> {
     let mut specs = Vec::new();
-    if let Ok(entries) = std::fs::read_dir(&spec_root) {
+    if let Ok(entries) = std::fs::read_dir(spec_root) {
         for e in entries.flatten() {
-            let dir = e.path();
-            if !dir.is_dir()
-                || dir
-                    .file_name()
-                    .map(|n| n.to_string_lossy().starts_with('.'))
-                    .unwrap_or(false)
+            let path = e.path();
+            if path
+                .file_name()
+                .map(|n| n.to_string_lossy().starts_with('.'))
+                .unwrap_or(false)
             {
                 continue;
             }
+
+            // 支持直接位于 .trellis/spec/ 根目录的规范（如 design-system.md, index.md, architecture.md）
+            if path.is_file() && path.extension().map(|x| x == "md").unwrap_or(false) {
+                let name = path
+                    .file_name()
+                    .map(|n| n.to_string_lossy().into_owned())
+                    .unwrap_or_default();
+                let content = std::fs::read_to_string(&path).unwrap_or_default();
+                let real_lines = content
+                    .lines()
+                    .filter(|l| {
+                        let t = l.trim();
+                        !t.is_empty()
+                            && !t.starts_with("<!--")
+                            && !t.contains("To be filled")
+                            && !t.contains("To fill")
+                    })
+                    .count();
+                let rel_path = name.clone();
+                let paths = crate::scan::extract_spec_paths(&content);
+                specs.push(SpecOut {
+                    path: rel_path,
+                    name: if name == "index.md" {
+                        "Overview".into()
+                    } else {
+                        name.trim_end_matches(".md").to_string()
+                    },
+                    category: "spec".into(),
+                    filled: real_lines >= 40,
+                    line_count: real_lines,
+                    referenced_by: 0,
+                    content,
+                    paths,
+                });
+                continue;
+            }
+
+            if !path.is_dir() {
+                continue;
+            }
+            let dir = path;
             let category = dir
                 .file_name()
                 .map(|n| n.to_string_lossy().into_owned())
@@ -1017,7 +1050,18 @@ fn list_specs(state: State<AppState>, project: String) -> Result<Vec<SpecOut>, S
         }
     }
     specs.sort_by(|a, b| a.category.cmp(&b.category).then(a.path.cmp(&b.path)));
-    Ok(specs)
+    specs
+}
+
+// 项目通用规范地图：扫描 .trellis/spec/ 返回每个规范的路径、填写状态、
+// 被任务引用次数（trellis-update-spec 沉淀的团队知识资产）。
+#[tauri::command]
+fn list_specs(state: State<AppState>, project: String) -> Result<Vec<SpecOut>, String> {
+    if !is_allowed_project(&state, &project) {
+        return Err("Project not found in scanned directories".into());
+    }
+    let spec_root = expand(&project).join(".trellis").join("spec");
+    Ok(scan_specs_in_root(&spec_root))
 }
 
 // 扫描项目中所有 design.md 并返回负向决策/避坑档案（DeepSeek discipline）
@@ -2256,6 +2300,56 @@ mod tests {
             .find(|a| a.session_id == "sess-1");
         assert!(activity.is_some(), "快照应包含 hook 会话活动");
         assert_eq!(activity.unwrap().project, project_str);
+
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn scan_specs_in_root_discovers_both_root_and_subdirectories() {
+        let root = std::env::temp_dir().join(format!("trellis-card-specs-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let spec_root = root.join(".trellis/spec");
+        std::fs::create_dir_all(spec_root.join("frontend")).unwrap();
+        std::fs::create_dir_all(spec_root.join("guides")).unwrap();
+
+        // 1. Root spec files (introduced in Lean Trellis v1.0.5 like design-system.md & index.md)
+        std::fs::write(
+            spec_root.join("design-system.md"),
+            "# Design System Spec\n\nColor Palette:\n- primary: indigo\n",
+        )
+        .unwrap();
+        std::fs::write(spec_root.join("index.md"), "# Project Guidelines Overview\n").unwrap();
+
+        // 2. Subdirectory spec files
+        std::fs::write(
+            spec_root.join("frontend/components.md"),
+            "# Component Guidelines\n",
+        )
+        .unwrap();
+        std::fs::write(spec_root.join("guides/pre-implementation-checklist.md"), "# Checklist\n").unwrap();
+
+        let specs = scan_specs_in_root(&spec_root);
+
+        // Assert that root specs are discovered and categorized under "spec"
+        let ds = specs.iter().find(|s| s.path == "design-system.md");
+        assert!(ds.is_some(), "design-system.md should be discovered at root");
+        let ds_spec = ds.unwrap();
+        assert_eq!(ds_spec.category, "spec");
+        assert_eq!(ds_spec.name, "design-system");
+
+        let idx = specs.iter().find(|s| s.path == "index.md");
+        assert!(idx.is_some(), "index.md at root should be discovered");
+        assert_eq!(idx.unwrap().name, "Overview");
+        assert_eq!(idx.unwrap().category, "spec");
+
+        // Assert that subdirectory specs are discovered under their respective category
+        let comp = specs.iter().find(|s| s.path == "frontend/components.md");
+        assert!(comp.is_some());
+        assert_eq!(comp.unwrap().category, "frontend");
+
+        let guide = specs.iter().find(|s| s.path == "guides/pre-implementation-checklist.md");
+        assert!(guide.is_some());
+        assert_eq!(guide.unwrap().category, "guides");
 
         std::fs::remove_dir_all(&root).unwrap();
     }
