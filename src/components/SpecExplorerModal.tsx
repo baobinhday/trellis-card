@@ -120,7 +120,7 @@ export const SpecExplorerModal: React.FC<SpecExplorerModalProps> = ({
                   placeholder="Filter specs..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-8 pr-3 py-1.5 text-xs bg-gray-100 dark:bg-gray-800/80 border border-transparent focus:border-indigo-500 rounded-lg text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none transition-all"
+                  className="w-full pl-8 pr-3 py-1.5 text-xs bg-gray-100 dark:bg-gray-800/80 border border-transparent focus:border-indigo-500 rounded-lg text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none transition-all select-text"
                 />
               </div>
             </div>
@@ -204,12 +204,12 @@ export const SpecExplorerModal: React.FC<SpecExplorerModalProps> = ({
               <>
                 {/* Spec Content Header */}
                 <div className="px-6 py-3 border-b border-gray-200 dark:border-trellis-darkBorder flex items-center justify-between gap-4 flex-shrink-0 bg-gray-50/40 dark:bg-gray-900/20">
-                  <div className="min-w-0">
+                  <div className="min-w-0 select-text">
                     <div className="flex items-center gap-2">
                       <h3 className="text-sm font-bold text-gray-900 dark:text-gray-100 truncate">
                         {selectedSpec.name}
                       </h3>
-                      <span className="text-[10px] font-medium px-2 py-0.5 rounded uppercase bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-900">
+                      <span className="text-[10px] font-medium px-2 py-0.5 rounded uppercase bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-900 select-none">
                         {selectedSpec.category}
                       </span>
                     </div>
@@ -221,7 +221,7 @@ export const SpecExplorerModal: React.FC<SpecExplorerModalProps> = ({
                   <button
                     onClick={() => onOpenInEditor(`${projectPath}/${selectedSpec.path}`)}
                     title="Open in Cursor / VS Code"
-                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-700 rounded-lg shadow-xs transition-colors flex-shrink-0"
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-700 rounded-lg shadow-xs transition-colors flex-shrink-0 select-none"
                   >
                     <Code className="w-3.5 h-3.5" />
                     <span>Open in Editor</span>
@@ -229,7 +229,7 @@ export const SpecExplorerModal: React.FC<SpecExplorerModalProps> = ({
                 </div>
 
                 {/* Markdown Body */}
-                <div className="flex-1 overflow-y-auto p-6">
+                <div className="flex-1 overflow-y-auto p-6 select-text">
                   <div className="prose prose-sm dark:prose-invert max-w-none prose-headings:font-bold prose-headings:tracking-tight prose-a:text-indigo-600 dark:prose-a:text-indigo-400 prose-code:text-indigo-600 dark:prose-code:text-indigo-400 prose-code:bg-gray-100 dark:prose-code:bg-gray-800 prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:before:content-none prose-code:after:content-none prose-pre:bg-gray-900 prose-pre:text-gray-100 prose-pre:border prose-pre:border-gray-800">
                     <ReactMarkdown remarkPlugins={[remarkGfm]}>
                       {selectedSpec.content || "*No content recorded for this spec yet.*"}

@@ -2,7 +2,7 @@
   "name": "trellis-card",
   "private": true,
   "type": "module",
-  "version": "1.0.0",
+  "version": "1.0.11",
   "description": "Read-only desktop observer for Trellis tasks and Agent activity",
   "scripts": {
     "dev": "vite",
