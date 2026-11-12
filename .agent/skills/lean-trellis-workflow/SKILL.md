@@ -27,6 +27,7 @@ The user interacts using natural language. The assistant automatically activates
 
 ### 1. Repository Evidence First (Non-Negotiable)
 - If an answer can be derived from inspecting code, tests, configs, or existing specs in `.trellis/spec/` — **the assistant must inspect the codebase first**.
+- If `.trellis/.runtime/codegraph.json` is present (check or query via `lean-trellis graph summary` / `lean-trellis graph explore "<symbol-or-file>"`), use it first to map architecture, callers/callees, and blast radius before broad `grep`/`glob` scans; verify any `[STALE CACHE]` files directly with `read_file`/`grep`, and fall back normally when no cache exists.
 - Never ask the user questions that repository evidence can already answer.
 - Ask the user only for: Product intent, feature scope boundaries (in-scope vs out-of-scope), UX preferences, or business risk tolerance.
 

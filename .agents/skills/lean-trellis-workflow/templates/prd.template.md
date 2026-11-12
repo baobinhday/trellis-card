@@ -40,7 +40,7 @@
 - Exact capabilities and components committed for this iteration.
 
 ### ❌ Out-of-Scope
-- Explicitly deferred items or ideas to prevent scope creep.
+- Explicitly deferred items or ideas to prevent scope creep (avoid citing unrelated source file paths here so graph task overlays stay accurate).
 
 ---
 

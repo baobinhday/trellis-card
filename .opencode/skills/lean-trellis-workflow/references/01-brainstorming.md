@@ -7,8 +7,8 @@ The goal of this phase is to transform raw user requirements into a rigorous, we
 ## 1. Evidence-First Principle
 Before asking any questions to the user:
 1. Search the codebase:
-   - Identify existing files implementing similar features.
-   - Review configurations, mock data, and unit tests.
+   - If `.trellis/.runtime/codegraph.json` exists, run `lean-trellis graph summary` or `lean-trellis graph explore "<target>"` first to inspect symbol definitions, callers/callees, and co-change blast radius in one call (check any `[STALE CACHE]` files directly).
+   - Otherwise (or for unindexed files), inspect existing files implementing similar features, configurations, mock data, and unit tests.
 2. Review existing specifications under `.trellis/spec/` or `docs/`.
 3. Run `lean-trellis mem recall "<topic>"` to inspect whether earlier discussions or decisions already addressed this requirement.
 

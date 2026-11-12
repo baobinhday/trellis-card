@@ -7,8 +7,9 @@ Use this single-agent workflow when creating or refreshing `.trellis/spec/` guid
 ## 1. Repository Architecture Analysis
 
 1. **Inspect existing `.trellis/spec/`**: Note which files are generic templates, outdated, or already project-specific.
-2. **Identify packages & runtime layers**: Read `package.json`, workspace configs, build scripts, and top-level docs to determine which code is CLI, backend, frontend, worker, shared library, or tooling.
-3. **Trace real source & test files**: Read representative modules and tests directly before turning any observation into a spec rule.
+2. **Inspect CodeGraph summary (if cached)**: If `.trellis/.runtime/codegraph.json` exists, run `lean-trellis graph summary` to quickly identify modules, top hub files, cross-language calls, and co-change clusters before scanning directories manually.
+3. **Identify packages & runtime layers**: Read `package.json`, workspace configs, build scripts, and top-level docs to determine which code is CLI, backend, frontend, worker, shared library, or tooling.
+4. **Trace real source & test files**: Read representative modules and tests directly before turning any observation into a spec rule.
 
 ### What to Capture
 
