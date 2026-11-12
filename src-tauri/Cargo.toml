@@ -1,6 +1,6 @@
 [package]
 name = "trellis-card"
-version = "1.0.0"
+version = "1.0.11"
 description = "Read-only desktop observer for Trellis tasks and Agent activity"
 edition = "2021"
 
@@ -21,6 +21,11 @@ dirs = "6"
 chrono = { version = "0.4", default-features = false, features = ["std", "clock"] }
 notify = "8"
 open = "5"
+tree-sitter = "0.25"
+tree-sitter-typescript = "0.23.2"
+tree-sitter-javascript = "0.25.0"
+tree-sitter-rust = "0.24.2"
+tree-sitter-python = "0.25.0"
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_Storage_FileSystem", "Win32_System_IO", "Win32_System_Pipes", "Win32_Security"] }

@@ -168,3 +168,66 @@ export interface GraphEdge {
   label?: string;
   sharedFiles?: string[];
 }
+
+export type CodeGraphMode = 'architecture' | 'ego' | 'task_spec';
+
+export interface CodeGraphUiNode {
+  id: string;
+  label: string;
+  kind: 'file' | 'symbol' | 'task';
+  language?: string | null;
+  module?: string | null;
+  file?: string | null;
+  startLine?: number | null;
+  endLine?: number | null;
+  symbolKind?: string | null;
+  signature?: string | null;
+  exported?: boolean | null;
+  hubScore: number;
+  symbolCount: number;
+  distance: number;
+  inTaskScope: boolean;
+  blastRadius: boolean;
+}
+
+export interface CodeGraphUiEdge {
+  id: string;
+  source: string;
+  target: string;
+  kind: 'imports' | 'calls' | 'co_change' | 'task_link' | 'defines' | string;
+  weight: number;
+  provenance: string;
+}
+
+export interface CodeGraphTaskSummary {
+  id: string;
+  title: string;
+  status: string;
+  fileCount: number;
+}
+
+export interface ScopedCodeGraphPayload {
+  generatedAt: string;
+  gitHead?: string | null;
+  mode: CodeGraphMode | string;
+  focusNode?: string | null;
+  languages: string[];
+  totalFiles: number;
+  totalSymbols: number;
+  totalEdges: number;
+  nodes: CodeGraphUiNode[];
+  edges: CodeGraphUiEdge[];
+  truncated: boolean;
+  tasks: CodeGraphTaskSummary[];
+}
+
+export interface CodeSearchMatch {
+  id: string;
+  label: string;
+  kind: 'file' | 'symbol';
+  file: string;
+  startLine?: number | null;
+  symbolKind?: string | null;
+  language?: string | null;
+  hubScore: number;
+}

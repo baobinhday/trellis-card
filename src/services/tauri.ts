@@ -1,4 +1,15 @@
-import { ProjectInfo, TasksPayload, TaskDetail, TrellisTask, SpecOut, RelationsPayload, PitfallEntry } from "../types";
+import {
+  ProjectInfo,
+  TasksPayload,
+  TaskDetail,
+  TrellisTask,
+  SpecOut,
+  RelationsPayload,
+  PitfallEntry,
+  CodeGraphMode,
+  ScopedCodeGraphPayload,
+  CodeSearchMatch,
+} from "../types";
 
 // Normalize a spec path relative to `.trellis/spec/` for matching across Graph & SpecExplorer
 export function normalizeSpecPath(raw: string): string {
@@ -90,6 +101,42 @@ export async function listRelations(project: string): Promise<RelationsPayload> 
   return await invokeTauri<RelationsPayload>("list_relations", { project });
 }
 
+// Query scoped AST + Co-Change code graph
+export async function getCodeGraph(options: {
+  project: string;
+  mode?: CodeGraphMode;
+  focusNode?: string | null;
+  taskId?: string | null;
+  hops?: number;
+  maxNodes?: number;
+  includeCoChange?: boolean;
+  forceRefresh?: boolean;
+}): Promise<ScopedCodeGraphPayload> {
+  return await invokeTauri<ScopedCodeGraphPayload>("get_code_graph", {
+    project: options.project,
+    mode: options.mode ?? "architecture",
+    focusNode: options.focusNode ?? null,
+    taskId: options.taskId ?? null,
+    hops: options.hops ?? 1,
+    maxNodes: options.maxNodes ?? 80,
+    includeCoChange: options.includeCoChange ?? true,
+    forceRefresh: options.forceRefresh ?? false,
+  });
+}
+
+// Search code files and AST symbols
+export async function searchCodeSymbols(
+  project: string,
+  query: string,
+  limit = 20
+): Promise<CodeSearchMatch[]> {
+  return await invokeTauri<CodeSearchMatch[]>("search_code_symbols", {
+    project,
+    query,
+    limit,
+  });
+}
+
 export async function listPitfalls(project: string): Promise<PitfallEntry[]> {
   return await invokeTauri<PitfallEntry[]>("list_pitfalls", { project });
 }
@@ -113,15 +160,37 @@ export async function listenToTaskChanges(callback: () => void): Promise<() => v
   return () => {};
 }
 
+// Listen to real-time source code watcher events for AST code graph
+export async function listenToCodeGraphChanges(callback: () => void): Promise<() => void> {
+  if (isTauri()) {
+    try {
+      const { listen } = await import("@tauri-apps/api/event");
+      const unlisten = await listen("codegraph-changed", () => callback());
+      return () => {
+        unlisten();
+      };
+    } catch (err) {
+      console.error("[Tauri Event Error] listenToCodeGraphChanges:", err);
+      return () => {};
+    }
+  }
+  return () => {};
+}
+
 // Open a URL or local file path
 export async function openUrl(url: string): Promise<void> {
   return await invokeTauri<void>("open_url", { url });
 }
 
 // Helper: Open in VS Code or Cursor using URI scheme
-export async function openInEditor(filePath: string, editor: "vscode" | "cursor" = "cursor"): Promise<void> {
+export async function openInEditor(
+  filePath: string,
+  editor: "vscode" | "cursor" = "cursor",
+  line?: number | null
+): Promise<void> {
   const scheme = editor === "cursor" ? "cursor://file" : "vscode://file";
-  const url = `${scheme}${filePath.startsWith("/") ? "" : "/"}${filePath}`;
+  const lineSuffix = line && line > 0 ? `:${line}` : "";
+  const url = `${scheme}${filePath.startsWith("/") ? "" : "/"}${filePath}${lineSuffix}`;
   try {
     await openUrl(url);
   } catch (err) {
@@ -318,6 +387,334 @@ function getMockResponse<T>(cmd: string, args?: Record<string, unknown>): T {
   }
   if (cmd === "list_pitfalls") {
     return [] as unknown as T;
+  }
+  if (cmd === "get_code_graph") {
+    const mode = (args?.mode as string) || "architecture";
+    const focusNode = (args?.focusNode as string) || null;
+    const taskId = (args?.taskId as string) || null;
+    const includeCoChange = args?.includeCoChange !== false;
+
+    if (mode === "ego" && focusNode) {
+      const mockNodes = [
+        {
+          id: "src/components/KnowledgeGraphView.tsx",
+          label: "KnowledgeGraphView.tsx",
+          kind: "file",
+          language: "typescript",
+          module: "src/components",
+          file: "src/components/KnowledgeGraphView.tsx",
+          hubScore: 6.4,
+          symbolCount: 4,
+          distance: focusNode.includes("KnowledgeGraphView") ? 0 : 1,
+          inTaskScope: false,
+          blastRadius: false,
+        },
+        {
+          id: "src/components/KnowledgeGraphView.tsx::KnowledgeGraphView",
+          label: "KnowledgeGraphView",
+          kind: "symbol",
+          language: "typescript",
+          module: "KnowledgeGraphView.tsx",
+          file: "src/components/KnowledgeGraphView.tsx",
+          startLine: 100,
+          endLine: 450,
+          symbolKind: "component",
+          signature: "export const KnowledgeGraphView: React.FC<KnowledgeGraphViewProps>",
+          exported: true,
+          hubScore: 6.4,
+          symbolCount: 1,
+          distance: 1,
+          inTaskScope: false,
+          blastRadius: false,
+        },
+        {
+          id: "src/services/tauri.ts::getCodeGraph",
+          label: "getCodeGraph",
+          kind: "symbol",
+          language: "typescript",
+          module: "tauri.ts",
+          file: "src/services/tauri.ts",
+          startLine: 94,
+          endLine: 112,
+          symbolKind: "function",
+          signature: "export async function getCodeGraph(options)",
+          exported: true,
+          hubScore: 8.2,
+          symbolCount: 1,
+          distance: 0,
+          inTaskScope: true,
+          blastRadius: false,
+        },
+        {
+          id: "src-tauri/src/lib.rs::get_code_graph",
+          label: "get_code_graph",
+          kind: "symbol",
+          language: "rust",
+          module: "lib.rs",
+          file: "src-tauri/src/lib.rs",
+          startLine: 980,
+          endLine: 1015,
+          symbolKind: "tauri_command",
+          signature: "async fn get_code_graph(state: State<'_, AppState>, project: String)",
+          exported: true,
+          hubScore: 9.1,
+          symbolCount: 1,
+          distance: 1,
+          inTaskScope: false,
+          blastRadius: true,
+        },
+        {
+          id: "src-tauri/src/codegraph.rs::slice_scoped_graph",
+          label: "slice_scoped_graph",
+          kind: "symbol",
+          language: "rust",
+          module: "codegraph.rs",
+          file: "src-tauri/src/codegraph.rs",
+          startLine: 1650,
+          endLine: 1780,
+          symbolKind: "function",
+          signature: "pub fn slice_scoped_graph(cache: &ProjectCodeGraphCache, ...)",
+          exported: true,
+          hubScore: 7.5,
+          symbolCount: 1,
+          distance: 1,
+          inTaskScope: false,
+          blastRadius: true,
+        },
+      ];
+      const mockEdges = [
+        {
+          id: "ego-1",
+          source: "src/components/KnowledgeGraphView.tsx::KnowledgeGraphView",
+          target: "src/services/tauri.ts::getCodeGraph",
+          kind: "calls",
+          weight: 1.0,
+          provenance: "ast_call",
+        },
+        {
+          id: "ego-2",
+          source: "src/services/tauri.ts::getCodeGraph",
+          target: "src-tauri/src/lib.rs::get_code_graph",
+          kind: "calls",
+          weight: 1.0,
+          provenance: "ast_tauri_ipc",
+        },
+        {
+          id: "ego-3",
+          source: "src-tauri/src/lib.rs::get_code_graph",
+          target: "src-tauri/src/codegraph.rs::slice_scoped_graph",
+          kind: "calls",
+          weight: 1.0,
+          provenance: "ast_call",
+        },
+      ];
+      return {
+        generatedAt: new Date().toISOString(),
+        gitHead: "mock-head",
+        mode: "ego",
+        focusNode,
+        languages: ["typescript", "rust"],
+        totalFiles: 5,
+        totalSymbols: 18,
+        totalEdges: 6,
+        nodes: mockNodes,
+        edges: mockEdges,
+        truncated: false,
+        tasks: [
+          {
+            id: "10-27-kanban-trellis-board",
+            title: "Kanban Board for Trellis Tasks",
+            status: "in_progress",
+            fileCount: 2,
+          },
+        ],
+      } as unknown as T;
+    }
+
+    const inScopeA = taskId === "10-27-kanban-trellis-board";
+    const archNodes = [
+      {
+        id: "src/App.tsx",
+        label: "App.tsx",
+        kind: "file",
+        language: "typescript",
+        module: "src",
+        file: "src/App.tsx",
+        hubScore: 7.4,
+        symbolCount: 6,
+        distance: inScopeA ? 0 : 1,
+        inTaskScope: inScopeA,
+        blastRadius: false,
+      },
+      {
+        id: "src/components/KnowledgeGraphView.tsx",
+        label: "KnowledgeGraphView.tsx",
+        kind: "file",
+        language: "typescript",
+        module: "src/components",
+        file: "src/components/KnowledgeGraphView.tsx",
+        hubScore: 6.4,
+        symbolCount: 5,
+        distance: 1,
+        inTaskScope: false,
+        blastRadius: inScopeA,
+      },
+      {
+        id: "src/services/tauri.ts",
+        label: "tauri.ts",
+        kind: "file",
+        language: "typescript",
+        module: "src/services",
+        file: "src/services/tauri.ts",
+        hubScore: 8.6,
+        symbolCount: 14,
+        distance: 1,
+        inTaskScope: false,
+        blastRadius: inScopeA,
+      },
+      {
+        id: "src/types.ts",
+        label: "types.ts",
+        kind: "file",
+        language: "typescript",
+        module: "src",
+        file: "src/types.ts",
+        hubScore: 9.2,
+        symbolCount: 18,
+        distance: inScopeA ? 0 : 1,
+        inTaskScope: inScopeA,
+        blastRadius: false,
+      },
+      {
+        id: "src-tauri/src/lib.rs",
+        label: "lib.rs",
+        kind: "file",
+        language: "rust",
+        module: "src-tauri/src",
+        file: "src-tauri/src/lib.rs",
+        hubScore: 9.5,
+        symbolCount: 24,
+        distance: 1,
+        inTaskScope: false,
+        blastRadius: false,
+      },
+      {
+        id: "src-tauri/src/codegraph.rs",
+        label: "codegraph.rs",
+        kind: "file",
+        language: "rust",
+        module: "src-tauri/src",
+        file: "src-tauri/src/codegraph.rs",
+        hubScore: 7.8,
+        symbolCount: 16,
+        distance: 1,
+        inTaskScope: false,
+        blastRadius: false,
+      },
+    ];
+    const archEdges = [
+      {
+        id: "m-1",
+        source: "src/App.tsx",
+        target: "src/components/KnowledgeGraphView.tsx",
+        kind: "imports",
+        weight: 1.0,
+        provenance: "ast_import",
+      },
+      {
+        id: "m-2",
+        source: "src/components/KnowledgeGraphView.tsx",
+        target: "src/services/tauri.ts",
+        kind: "imports",
+        weight: 1.0,
+        provenance: "ast_import",
+      },
+      {
+        id: "m-3",
+        source: "src/services/tauri.ts",
+        target: "src/types.ts",
+        kind: "imports",
+        weight: 1.0,
+        provenance: "ast_import",
+      },
+      {
+        id: "m-4",
+        source: "src-tauri/src/lib.rs",
+        target: "src-tauri/src/codegraph.rs",
+        kind: "imports",
+        weight: 1.0,
+        provenance: "ast_import",
+      },
+      ...(includeCoChange
+        ? [
+            {
+              id: "m-5",
+              source: "src/services/tauri.ts",
+              target: "src-tauri/src/lib.rs",
+              kind: "co_change",
+              weight: 1.25,
+              provenance: "ast_tauri_ipc",
+            },
+          ]
+        : []),
+    ];
+    return {
+      generatedAt: new Date().toISOString(),
+      gitHead: "mock-head",
+      mode: "architecture",
+      focusNode,
+      languages: ["typescript", "rust"],
+      totalFiles: 6,
+      totalSymbols: 83,
+      totalEdges: archEdges.length,
+      nodes: archNodes,
+      edges: archEdges,
+      truncated: false,
+      tasks: [
+        {
+          id: "10-27-kanban-trellis-board",
+          title: "Kanban Board for Trellis Tasks",
+          status: "in_progress",
+          fileCount: 2,
+        },
+      ],
+    } as unknown as T;
+  }
+  if (cmd === "search_code_symbols") {
+    const q = String(args?.query || "").toLowerCase();
+    const all: CodeSearchMatch[] = [
+      {
+        id: "src/components/KnowledgeGraphView.tsx",
+        label: "KnowledgeGraphView.tsx",
+        kind: "file",
+        file: "src/components/KnowledgeGraphView.tsx",
+        language: "typescript",
+        hubScore: 6.4,
+      },
+      {
+        id: "src/services/tauri.ts::getCodeGraph",
+        label: "getCodeGraph",
+        kind: "symbol",
+        file: "src/services/tauri.ts",
+        startLine: 94,
+        symbolKind: "function",
+        language: "typescript",
+        hubScore: 8.2,
+      },
+      {
+        id: "src-tauri/src/lib.rs::get_code_graph",
+        label: "get_code_graph",
+        kind: "symbol",
+        file: "src-tauri/src/lib.rs",
+        startLine: 980,
+        symbolKind: "tauri_command",
+        language: "rust",
+        hubScore: 9.1,
+      },
+    ];
+    return all.filter(
+      (m) => m.label.toLowerCase().includes(q) || m.file.toLowerCase().includes(q)
+    ) as unknown as T;
   }
   if (cmd === "archive_task" || cmd === "update_task_status" || cmd === "toggle_subtask") {
     return true as unknown as T;

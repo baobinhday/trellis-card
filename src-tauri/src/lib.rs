@@ -1,4 +1,5 @@
 mod activity;
+mod codegraph;
 mod config;
 mod focus;
 mod hook_cli;
@@ -29,6 +30,8 @@ pub struct AppState {
     /* 项目发现缓存：list_projects / is_allowed_project 高频调用，避免每次重新扫 roots。
     TTL 2s，config 变更（roots/动态项目）时主动失效。 */
     projects_cache: Mutex<ProjectsCache>,
+    /* AST + Co-Change codegraph cache keyed by project root */
+    codegraph_cache: Mutex<HashMap<PathBuf, codegraph::ProjectCodeGraphCache>>,
 }
 
 #[derive(Default)]
@@ -951,6 +954,82 @@ fn list_relations(state: State<AppState>, project: String) -> Result<RelationsPa
     })
 }
 
+async fn get_or_build_codegraph(
+    state: &State<'_, AppState>,
+    project_dir: PathBuf,
+    force_refresh: bool,
+) -> Result<codegraph::ProjectCodeGraphCache, String> {
+    let existing = if force_refresh {
+        None
+    } else {
+        state
+            .codegraph_cache
+            .lock()
+            .map_err(|e| format!("CodeGraph cache lock error: {e}"))?
+            .get(&project_dir)
+            .cloned()
+    };
+
+    let build_dir = project_dir.clone();
+    let refreshed = tauri::async_runtime::spawn_blocking(move || {
+        codegraph::build_or_refresh_cache(&build_dir, existing.as_ref())
+    })
+    .await
+    .map_err(|e| format!("CodeGraph worker failed: {e}"))?;
+
+    if let Ok(mut guard) = state.codegraph_cache.lock() {
+        guard.insert(project_dir, refreshed.clone());
+    }
+    Ok(refreshed)
+}
+
+#[tauri::command]
+async fn get_code_graph(
+    state: State<'_, AppState>,
+    project: String,
+    mode: Option<String>,
+    focus_node: Option<String>,
+    task_id: Option<String>,
+    hops: Option<usize>,
+    max_nodes: Option<usize>,
+    include_co_change: Option<bool>,
+    force_refresh: Option<bool>,
+) -> Result<codegraph::ScopedCodeGraphPayload, String> {
+    if !is_allowed_project(&state, &project) {
+        return Err("Project not found in scanned directories".into());
+    }
+    let project_dir = expand(&project);
+    let built = get_or_build_codegraph(&state, project_dir, force_refresh.unwrap_or(false)).await?;
+    Ok(codegraph::slice_scoped_graph(
+        &built,
+        mode.as_deref().unwrap_or("architecture"),
+        focus_node.as_deref(),
+        task_id.as_deref(),
+        hops.unwrap_or(1),
+        max_nodes.unwrap_or(codegraph::DEFAULT_MAX_NODES),
+        include_co_change.unwrap_or(true),
+    ))
+}
+
+#[tauri::command]
+async fn search_code_symbols(
+    state: State<'_, AppState>,
+    project: String,
+    query: String,
+    limit: Option<usize>,
+) -> Result<Vec<codegraph::CodeSearchMatch>, String> {
+    if !is_allowed_project(&state, &project) {
+        return Err("Project not found in scanned directories".into());
+    }
+    let project_dir = expand(&project);
+    let built = get_or_build_codegraph(&state, project_dir, false).await?;
+    let mut matches = codegraph::search_symbols(&built, &query);
+    if let Some(lim) = limit {
+        matches.truncate(lim.clamp(1, 50));
+    }
+    Ok(matches)
+}
+
 pub(crate) fn scan_specs_in_root(spec_root: &Path) -> Vec<SpecOut> {
     let mut specs = Vec::new();
     if let Ok(entries) = std::fs::read_dir(spec_root) {
@@ -1608,6 +1687,7 @@ pub fn run() {
                 runtime: Mutex::new(RuntimeStore::default()),
                 runtime_coord: RuntimeCoordinator::spawn(handle.clone()),
                 projects_cache: Mutex::new(ProjectsCache::default()),
+                codegraph_cache: Mutex::new(HashMap::new()),
             });
 
             start_runtime_workers(app.handle());
@@ -1667,6 +1747,8 @@ pub fn run() {
             list_tasks,
             list_archived,
             list_relations,
+            get_code_graph,
+            search_code_symbols,
             list_specs,
             list_pitfalls,
             get_task,
@@ -2217,6 +2299,7 @@ mod tests {
             runtime: Mutex::new(RuntimeStore::default()),
             runtime_coord: RuntimeCoordinator::new(),
             projects_cache: Mutex::new(ProjectsCache::default()),
+            codegraph_cache: Mutex::new(HashMap::new()),
         }
     }
 
@@ -2413,6 +2496,15 @@ mod tests {
         assert!(guide.is_some());
         assert_eq!(guide.unwrap().category, "guides");
 
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn codegraph_containment_rejects_unscanned_project() {
+        let (root, state) = hook_fixture("codegraph-auth");
+        let allowed = platform::normalize_path(&root.join("alpha"));
+        assert!(is_allowed_project(&state, &allowed.to_string_lossy()));
+        assert!(!is_allowed_project(&state, "/tmp/not-an-allowed-project"));
         std::fs::remove_dir_all(&root).unwrap();
     }
 }

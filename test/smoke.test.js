@@ -44,6 +44,14 @@ test("smoke test: build output contains required files", () => {
     "bundle should include Knowledge Graph view"
   );
   assert.ok(
+    jsContent.includes("Code Architecture"),
+    "bundle should include Tier 1 Code Architecture graph mode"
+  );
+  assert.ok(
+    jsContent.includes("Symbol Ego-Graph"),
+    "bundle should include Tier 2 Symbol Ego-Graph mode"
+  );
+  assert.ok(
     jsContent.includes("Timeline"),
     "bundle should include Evolution Timeline view"
   );

@@ -411,6 +411,7 @@ export const App: React.FC = () => {
               projectPath={selectedProject.path}
               onSelectTaskById={handleSelectTaskById}
               onOpenSpec={(spec) => handleOpenSpec(spec)}
+              onOpenInEditor={(p, line) => openInEditor(p, "cursor", line)}
               refreshTrigger={refreshKey}
             />
           ) : activeView === "pitfalls" ? (

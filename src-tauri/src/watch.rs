@@ -7,9 +7,11 @@ use std::time::{Duration, Instant};
 use tauri::Emitter;
 
 const DEBOUNCE: Duration = Duration::from_millis(300);
+const CODE_DEBOUNCE: Duration = Duration::from_millis(800);
 const REDISCOVER: Duration = Duration::from_secs(60);
 const EVENT: &str = "tasks-changed";
 const RUNTIME_EVENT: &str = "runtime-reconciliation-needed";
+const CODEGRAPH_EVENT: &str = "codegraph-changed";
 
 pub fn is_relevant_task_event(path: &Path) -> bool {
     let comps: Vec<String> = path
@@ -56,19 +58,38 @@ pub fn is_relevant_task_event(path: &Path) -> bool {
     rest.len() == 2 && rest[0] == "research" && rest[1].ends_with(".md")
 }
 
-// 当前所有 roots 下发现的项目的 .trellis 目录集合
-fn discover_trellis_dirs() -> Vec<PathBuf> {
+// 当前所有 roots 下发现的项目的 .trellis 目录与主要源码目录集合
+fn discover_watch_dirs() -> Vec<PathBuf> {
     let cfg = crate::config::load();
-    crate::discover_all(&cfg)
-        .iter()
-        .map(|p| p.join(".trellis"))
-        .filter(|p| p.is_dir())
-        .collect()
+    let mut dirs = Vec::new();
+    let code_subdirs = [
+        "src",
+        "src-tauri/src",
+        "app",
+        "lib",
+        "server",
+        "backend",
+        "frontend",
+        "scripts",
+    ];
+    for proj in crate::discover_all(&cfg) {
+        let trellis = proj.join(".trellis");
+        if trellis.is_dir() {
+            dirs.push(trellis);
+        }
+        for sub in code_subdirs {
+            let candidate = proj.join(sub);
+            if candidate.is_dir() {
+                dirs.push(candidate);
+            }
+        }
+    }
+    dirs
 }
 
 // 对齐监听集合与发现结果；返回集合是否有增删
 fn sync_watches(watcher: &mut RecommendedWatcher, watched: &mut Vec<PathBuf>) -> bool {
-    let desired = discover_trellis_dirs();
+    let desired = discover_watch_dirs();
     let mut changed = false;
     // 摘除已消失的项目
     watched.retain(|p| {
@@ -115,12 +136,20 @@ pub fn spawn_watcher(app: tauri::AppHandle) {
         println!("[watch] Started, watching {} .trellis directories", watched.len());
 
         let mut dirty_at: Option<Instant> = None;
+        let mut code_dirty_at: Option<Instant> = None;
         let mut last_tick = Instant::now();
         loop {
             match rx.recv_timeout(Duration::from_millis(100)) {
                 Ok(Ok(event)) => {
                     if event.paths.iter().any(|p| is_relevant_task_event(p)) {
                         dirty_at = Some(Instant::now());
+                    }
+                    if event
+                        .paths
+                        .iter()
+                        .any(|p| crate::codegraph::is_relevant_code_file(p))
+                    {
+                        code_dirty_at = Some(Instant::now());
                     }
                 }
                 Ok(Err(e)) => eprintln!("[watch] Event error: {}", e),
@@ -133,6 +162,12 @@ pub fn spawn_watcher(app: tauri::AppHandle) {
                     dirty_at = None;
                     let _ = app.emit(EVENT, ());
                     let _ = app.emit(RUNTIME_EVENT, ());
+                }
+            }
+            if let Some(t) = code_dirty_at {
+                if t.elapsed() >= CODE_DEBOUNCE {
+                    code_dirty_at = None;
+                    let _ = app.emit(CODEGRAPH_EVENT, ());
                 }
             }
             // 每 60s 重新发现项目：增删时更新监听并通知前端（roots 变化靠这里收敛）
