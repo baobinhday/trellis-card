@@ -12,7 +12,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { SpecOut } from "../types";
-import { listSpecs } from "../services/tauri";
+import { listSpecs, normalizeSpecPath } from "../services/tauri";
 
 interface SpecExplorerModalProps {
   isOpen: boolean;
@@ -46,7 +46,13 @@ export const SpecExplorerModal: React.FC<SpecExplorerModalProps> = ({
         if (!isMounted) return;
         setSpecs(data);
         if (initialSpecPath) {
-          const matched = data.find((s) => s.path === initialSpecPath || s.name === initialSpecPath);
+          const normInitial = normalizeSpecPath(initialSpecPath).replace(/\/+$/, "");
+          const matched = data.find(
+            (s) =>
+              normalizeSpecPath(s.path) === normInitial ||
+              normalizeSpecPath(s.path) === `${normInitial}/index.md` ||
+              s.name === initialSpecPath
+          );
           setSelectedSpec(matched || data[0] || null);
         } else if (data.length > 0) {
           setSelectedSpec(data[0]);

@@ -157,11 +157,14 @@ export interface GraphNode {
   status?: string;
   group?: string;
   archived?: boolean;
+  specPath?: string;
 }
 
 export interface GraphEdge {
   id: string;
   source: string;
   target: string;
-  relationType: 'spec_ref' | 'parent_child' | 'session_ref' | 'prd_ref';
+  relationType: 'spec_ref' | 'parent_child' | 'session_ref' | 'prd_ref' | 'shared_file';
+  label?: string;
+  sharedFiles?: string[];
 }

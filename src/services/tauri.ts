@@ -1,5 +1,14 @@
 import { ProjectInfo, TasksPayload, TaskDetail, TrellisTask, SpecOut, RelationsPayload, PitfallEntry } from "../types";
 
+// Normalize a spec path relative to `.trellis/spec/` for matching across Graph & SpecExplorer
+export function normalizeSpecPath(raw: string): string {
+  return raw
+    .replace(/\\/g, "/")
+    .trim()
+    .replace(/^[./]+/, "")
+    .replace(/^(?:\.?trellis\/)?spec\//, "");
+}
+
 // Check if running inside Tauri webview
 export const isTauri = (): boolean => {
   return typeof window !== "undefined" && ("__TAURI_INTERNALS__" in window || "__TAURI__" in window);
@@ -255,8 +264,54 @@ function getMockResponse<T>(cmd: string, args?: Record<string, unknown>): T {
     ] as unknown as T;
   }
   if (cmd === "list_relations") {
+    const relationTasks = [
+      {
+        id: "00-bootstrap-guidelines",
+        dir: "research/00-bootstrap-guidelines",
+        title: "Bootstrap Guidelines",
+        status: "completed",
+        priority: "P2",
+        children: [],
+        specRefs: [".trellis/spec/frontend/component-guidelines.md", ".trellis/spec/tauri/ipc-commands.md"],
+        fileRefs: ["src/types.ts"],
+        prdRefs: [],
+        subtasks: [],
+        progress: 1.0,
+        archived: false,
+      },
+      {
+        id: "10-27-kanban-trellis-board",
+        dir: "research/10-27-kanban-trellis-board",
+        title: "Kanban Board for Trellis Tasks",
+        status: "in_progress",
+        priority: "P1",
+        parent: "00-bootstrap-guidelines",
+        children: ["10-26-i18n-en-zh"],
+        specRefs: [".trellis/spec/frontend/component-guidelines.md"],
+        fileRefs: ["src/App.tsx", "src/types.ts"],
+        prdRefs: ["00-bootstrap-guidelines"],
+        subtasks: MOCK_TASKS[0].subtasks,
+        progress: 0.6,
+        archived: false,
+      },
+      {
+        id: "10-26-i18n-en-zh",
+        dir: "research/10-26-i18n-en-zh",
+        title: "Support i18n English and Chinese",
+        status: "completed",
+        priority: "P2",
+        parent: "10-27-kanban-trellis-board",
+        children: [],
+        specRefs: [".trellis/spec/tauri/ipc-commands.md"],
+        fileRefs: ["src/App.tsx"],
+        prdRefs: ["10-27-kanban-trellis-board"],
+        subtasks: MOCK_TASKS[2].subtasks,
+        progress: 1.0,
+        archived: false,
+      },
+    ];
     return {
-      tasks: [],
+      tasks: relationTasks,
       specGroups: [],
       prdGroups: [],
     } as unknown as T;

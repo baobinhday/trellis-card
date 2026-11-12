@@ -219,6 +219,362 @@ fn collect_prd_refs(task_dir: &Path) -> Vec<String> {
         .unwrap_or_default()
 }
 
+/// Normalize a spec reference path relative to `.trellis/spec/` for consistent matching
+/// between `Task.spec_refs` and `SpecOut.path`.
+pub(crate) fn normalize_spec_rel_path(raw: &str) -> String {
+    let norm = raw.replace('\\', "/");
+    let mut s = norm.trim();
+    while let Some(stripped) = s.strip_prefix("./") {
+        s = stripped;
+    }
+    s = s.trim_start_matches('/');
+    for prefix in [".trellis/spec/", "trellis/spec/", "spec/"] {
+        if let Some(stripped) = s.strip_prefix(prefix) {
+            return stripped.to_string();
+        }
+    }
+    s.to_string()
+}
+
+const KNOWN_CODE_FILE_PREFIXES: &[&str] = &[
+    "src/",
+    "src-tauri/",
+    "app/",
+    "apps/",
+    "packages/",
+    "server/",
+    "client/",
+    "lib/",
+    "core/",
+    "components/",
+    "scripts/",
+    "test/",
+    "tests/",
+    "e2e/",
+    "public/",
+    "docs/",
+];
+
+#[derive(Default)]
+struct LeanMarkdownRefs {
+    spec_refs: Vec<String>,
+    file_refs: Vec<String>,
+    prd_refs: Vec<String>,
+}
+
+fn push_unique(vec: &mut Vec<String>, seen: &mut std::collections::HashSet<String>, val: String) {
+    if !val.is_empty() && seen.insert(val.clone()) {
+        vec.push(val);
+    }
+}
+
+fn strip_line_suffix(s: &str) -> &str {
+    let without_anchor = s.split('#').next().unwrap_or(s);
+    if let Some(colon_idx) = without_anchor.rfind(':') {
+        let suffix = &without_anchor[colon_idx + 1..];
+        if !suffix.is_empty()
+            && suffix
+                .chars()
+                .all(|c| c.is_ascii_digit() || c == '-' || c == ',')
+        {
+            return &without_anchor[..colon_idx];
+        }
+    }
+    without_anchor
+}
+
+fn normalize_markdown_token(raw: &str, project_prefix: Option<&str>) -> Option<String> {
+    let mut s = raw.trim();
+    if s.is_empty() {
+        return None;
+    }
+
+    // Strip outer markdown brackets carefully without breaking Next.js dynamic routes like `rooms/[id]/page.tsx`
+    while let Some(rest) = s.strip_prefix('[') {
+        if rest.ends_with(']') && !rest[..rest.len() - 1].contains('[') {
+            s = &rest[..rest.len() - 1];
+        } else if !rest.contains(']') {
+            s = rest;
+        } else {
+            break;
+        }
+    }
+    while let Some(rest) = s.strip_suffix(']') {
+        if !rest.contains('[') {
+            s = rest;
+        } else {
+            break;
+        }
+    }
+
+    if s.starts_with("http://") || s.starts_with("https://") {
+        return None;
+    }
+
+    if let Some(file_rest) = s.strip_prefix("file://") {
+        if let Some(idx) = file_rest.find("/.trellis/") {
+            s = &file_rest[idx + 1..];
+        } else if let Some(prefix) = project_prefix {
+            let trimmed_file = file_rest.trim_end_matches('/');
+            if let Some(rel) = trimmed_file.strip_prefix(prefix) {
+                s = rel.trim_start_matches('/');
+            } else {
+                return None;
+            }
+        } else {
+            return None;
+        }
+    }
+
+    let s = strip_line_suffix(s);
+    let mut s = s.trim_end_matches(['.', ',', ';', ':']);
+    while let Some(rest) = s.strip_prefix("./") {
+        s = rest;
+    }
+    s = s.trim_start_matches('/');
+
+    if s.is_empty()
+        || s.contains('*')
+        || s.contains("..")
+        || s.contains('{')
+        || s.contains('}')
+        || s.contains('<')
+        || s.contains('>')
+    {
+        return None;
+    }
+
+    Some(s.to_string())
+}
+
+fn resolve_spec_token(seg: &str, project_dir: &Path) -> Option<String> {
+    let rest = seg.strip_prefix(".trellis/spec/")?;
+    let trimmed = rest.trim_end_matches('/');
+    if trimmed.is_empty() {
+        return None;
+    }
+    if trimmed.ends_with(".md") {
+        return Some(format!(".trellis/spec/{}", trimmed));
+    }
+    // Directory reference like `.trellis/spec/big-question/` -> resolve to `index.md` if present
+    if seg.ends_with('/') || !trimmed.contains('.') {
+        let dir = project_dir.join(".trellis").join("spec").join(trimmed);
+        if dir.join("index.md").is_file() {
+            return Some(format!(".trellis/spec/{}/index.md", trimmed));
+        }
+    }
+    None
+}
+
+fn extract_prd_task_path_ref(seg: &str) -> Option<String> {
+    if let Some(rest) = seg.strip_prefix(".trellis/research/") {
+        let mut parts = rest.split('/').filter(|p| !p.is_empty());
+        let first = parts.next()?;
+        if first == "archive" {
+            let second = parts.next()?;
+            let is_ym = second.len() == 7
+                && second.as_bytes().get(4) == Some(&b'-')
+                && second[..4].chars().all(|c| c.is_ascii_digit())
+                && second[5..].chars().all(|c| c.is_ascii_digit());
+            let candidate = if is_ym { parts.next()? } else { second };
+            if !candidate.is_empty() && candidate != "legacy" && !candidate.ends_with(".md") {
+                return Some(candidate.to_string());
+            }
+            return None;
+        }
+        if first != "README.md" && !first.ends_with(".md") {
+            return Some(first.to_string());
+        }
+        return None;
+    }
+
+    if let Some(rest) = seg.strip_prefix(".trellis/tasks/") {
+        let first = rest.split('/').find(|p| !p.is_empty())?;
+        if first != "archive" && !first.ends_with(".md") {
+            return Some(first.to_string());
+        }
+    }
+    None
+}
+
+fn is_valid_code_file_ref(seg: &str) -> bool {
+    if seg.starts_with(".trellis/") {
+        return false;
+    }
+    if !KNOWN_CODE_FILE_PREFIXES.iter().any(|p| seg.starts_with(p)) {
+        return false;
+    }
+    let last = seg.rsplit('/').next().unwrap_or("");
+    let Some(dot_idx) = last.rfind('.') else {
+        return false;
+    };
+    let stem = &last[..dot_idx];
+    let ext = &last[dot_idx + 1..];
+    !stem.is_empty() && !ext.is_empty() && ext.len() <= 8 && ext.chars().all(|c| c.is_ascii_alphanumeric())
+}
+
+fn collect_lean_markdown_files(task_dir: &Path) -> Vec<PathBuf> {
+    let mut files = Vec::new();
+    for name in ["prd.md", "design.md", "implement.md"] {
+        let p = task_dir.join(name);
+        if p.is_file() {
+            files.push(p);
+        }
+    }
+    let research_dir = task_dir.join("research");
+    if research_dir.is_dir() {
+        if let Ok(entries) = fs::read_dir(&research_dir) {
+            let mut sub_files: Vec<PathBuf> = entries
+                .flatten()
+                .map(|e| e.path())
+                .filter(|p| p.is_file() && p.extension().map(|x| x == "md").unwrap_or(false))
+                .collect();
+            sub_files.sort();
+            files.extend(sub_files);
+        }
+    }
+    files
+}
+
+fn collect_lean_markdown_refs(
+    project_dir: &Path,
+    task_dir: &Path,
+    self_id: &str,
+) -> LeanMarkdownRefs {
+    let mut out = LeanMarkdownRefs::default();
+    let mut seen_spec = std::collections::HashSet::new();
+    let mut seen_file = std::collections::HashSet::new();
+    let mut seen_prd = std::collections::HashSet::new();
+
+    let project_norm = project_dir
+        .to_string_lossy()
+        .replace('\\', "/")
+        .trim_end_matches('/')
+        .to_string();
+
+    for md_path in collect_lean_markdown_files(task_dir) {
+        let Ok(content) = fs::read_to_string(&md_path) else {
+            continue;
+        };
+        for line in content.lines() {
+            let norm = line.replace('\\', "/");
+            for link_chunk in norm.split("](") {
+                for raw_tok in link_chunk.split(|c: char| {
+                    c.is_whitespace()
+                        || matches!(c, '"' | '\'' | '`' | '(' | ')' | '<' | '>' | ',' | ';' | '|')
+                }) {
+                    let Some(seg) = normalize_markdown_token(raw_tok, Some(&project_norm)) else {
+                        continue;
+                    };
+                    if let Some(spec) = resolve_spec_token(&seg, project_dir) {
+                        push_unique(&mut out.spec_refs, &mut seen_spec, spec);
+                        continue;
+                    }
+                    if let Some(prd_id) = extract_prd_task_path_ref(&seg) {
+                        if prd_id != self_id {
+                            push_unique(&mut out.prd_refs, &mut seen_prd, prd_id);
+                        }
+                        continue;
+                    }
+                    if is_valid_code_file_ref(&seg) {
+                        push_unique(&mut out.file_refs, &mut seen_file, seg);
+                    }
+                }
+            }
+        }
+    }
+    out
+}
+
+/// Resolve backtick-quoted task slug mentions and explicit Parent headers across scanned Lean tasks.
+fn resolve_lean_cross_refs(project_dir: &Path, tasks: &mut [Task]) {
+    let known_ids: std::collections::HashSet<String> =
+        tasks.iter().map(|t| t.id.clone()).collect();
+    if known_ids.is_empty() {
+        return;
+    }
+
+    for task in tasks.iter_mut() {
+        if !task.dir.starts_with("research/") && !task.dir.starts_with("research\\") {
+            continue;
+        }
+        let task_dir = project_dir.join(".trellis").join(&task.dir);
+        if !is_lean_task_dir(&task_dir) || task_dir.join("task.json").is_file() {
+            continue;
+        }
+
+        let mut seen_prd: std::collections::HashSet<String> =
+            task.prd_refs.iter().cloned().collect();
+
+        for md_path in collect_lean_markdown_files(&task_dir) {
+            let Ok(content) = fs::read_to_string(&md_path) else {
+                continue;
+            };
+            let is_prd = md_path
+                .file_name()
+                .map(|n| n == "prd.md")
+                .unwrap_or(false);
+
+            for line in content.lines() {
+                // Check explicit `Parent:` header in prd.md
+                if is_prd && task.parent.is_none() {
+                    let trimmed = line.trim();
+                    let cleaned = trimmed
+                        .trim_start_matches('-')
+                        .trim()
+                        .replace("**", "");
+                    let lower = cleaned.to_lowercase();
+                    if let Some(rest) = lower
+                        .strip_prefix("parent:")
+                        .map(|_| cleaned.split_once(':').map(|x| x.1).unwrap_or(""))
+                    {
+                        for tok in rest.split(|c: char| {
+                            c.is_whitespace() || matches!(c, '`' | '"' | '\'' | ',' | ';' | '(' | ')')
+                        }) {
+                            let cand = tok.trim().trim_end_matches('/');
+                            if !cand.is_empty() && cand != task.id && known_ids.contains(cand) {
+                                task.parent = Some(cand.to_string());
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                // Match exact inline code spans like `` `game-splendor` `` or `` `board-game-core` ``
+                for (idx, span) in line.split('`').enumerate() {
+                    if idx % 2 == 1 {
+                        let cand = span.trim().trim_end_matches('/');
+                        if cand != task.id && known_ids.contains(cand) {
+                            push_unique(&mut task.prd_refs, &mut seen_prd, cand.to_string());
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Symmetrically populate `children` for any resolved `parent` links
+    let mut parent_to_children: std::collections::HashMap<String, Vec<String>> =
+        std::collections::HashMap::new();
+    for task in tasks.iter() {
+        if let Some(ref p) = task.parent {
+            parent_to_children
+                .entry(p.clone())
+                .or_default()
+                .push(task.id.clone());
+        }
+    }
+    for task in tasks.iter_mut() {
+        if let Some(child_ids) = parent_to_children.get(&task.id) {
+            for cid in child_ids {
+                if !task.children.contains(cid) {
+                    task.children.push(cid.clone());
+                }
+            }
+        }
+    }
+}
+
 fn count_md_in_dir(dir: &Path) -> usize {
     fs::read_dir(dir)
         .map(|entries| {
@@ -729,6 +1085,7 @@ pub fn scan_archived(project_dir: &Path) -> (Vec<Task>, Vec<String>) {
     let lean_archive = research_dir.join("archive");
     if is_directory(&lean_archive) {
         scan_lean_archived_dir(
+            project_dir,
             &research_dir,
             &lean_archive,
             &sessions,
@@ -738,6 +1095,8 @@ pub fn scan_archived(project_dir: &Path) -> (Vec<Task>, Vec<String>) {
             &mut errors,
         );
     }
+
+    resolve_lean_cross_refs(project_dir, &mut tasks);
 
     tasks.sort_by(|a, b| {
         a.created_at
@@ -817,6 +1176,7 @@ fn scan_tasks_inner(project_dir: &Path, include_archived: bool) -> (Vec<Task>, V
                 if dir_name == "archive" {
                     if include_archived {
                         scan_lean_archived_dir(
+                            project_dir,
                             &research_dir,
                             &task_path,
                             &sessions,
@@ -836,6 +1196,7 @@ fn scan_tasks_inner(project_dir: &Path, include_archived: bool) -> (Vec<Task>, V
                 }
                 let rel_dir = format!("research/{}", dir_name);
                 scan_lean_task_dir(
+                    project_dir,
                     &dir_name,
                     &rel_dir,
                     false,
@@ -848,6 +1209,8 @@ fn scan_tasks_inner(project_dir: &Path, include_archived: bool) -> (Vec<Task>, V
             }
         }
     }
+
+    resolve_lean_cross_refs(project_dir, &mut tasks);
 
     tasks.sort_by(|a, b| {
         a.created_at
@@ -1334,7 +1697,26 @@ fn lean_task_mtime(task_path: &Path) -> i64 {
     max_m
 }
 
+fn merge_lean_refs(task: &mut Task, extra: LeanMarkdownRefs) {
+    let mut seen_spec: std::collections::HashSet<String> = task.spec_refs.iter().cloned().collect();
+    for s in extra.spec_refs {
+        push_unique(&mut task.spec_refs, &mut seen_spec, s);
+    }
+    let mut seen_file: std::collections::HashSet<String> = task.file_refs.iter().cloned().collect();
+    for f in extra.file_refs {
+        push_unique(&mut task.file_refs, &mut seen_file, f);
+    }
+    let mut seen_prd: std::collections::HashSet<String> = task.prd_refs.iter().cloned().collect();
+    for p in extra.prd_refs {
+        if p != task.id {
+            push_unique(&mut task.prd_refs, &mut seen_prd, p);
+        }
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
 fn scan_lean_task_dir(
+    project_dir: &Path,
     dir_name: &str,
     rel_dir: &str,
     archived: bool,
@@ -1357,6 +1739,7 @@ fn scan_lean_task_dir(
     };
     let phase = infer_phase(&status, &artifacts, true);
     let workflow = resolve_task_workflow(None, developer_workflow, config_default_workflow);
+    let refs = collect_lean_markdown_refs(project_dir, task_path, dir_name);
 
     tasks.push(Task {
         id: dir_name.to_string(),
@@ -1387,16 +1770,18 @@ fn scan_lean_task_dir(
         sessions: task_sessions,
         excerpt,
         artifacts,
-        spec_refs: Vec::new(),
-        file_refs: Vec::new(),
-        prd_refs: Vec::new(),
+        spec_refs: refs.spec_refs,
+        file_refs: refs.file_refs,
+        prd_refs: refs.prd_refs,
         phase,
         dir: rel_dir.to_string(),
         workflow,
     });
 }
 
+#[allow(clippy::too_many_arguments)]
 fn scan_lean_archived_dir(
+    project_dir: &Path,
     research_dir: &Path,
     archive_dir: &Path,
     sessions: &std::collections::HashMap<String, Vec<SessionInfo>>,
@@ -1418,10 +1803,50 @@ fn scan_lean_archived_dir(
         if !path.is_dir() || dir_name.starts_with('.') {
             continue;
         }
-        if is_lean_task_dir(&path) {
+        if is_bootstrap_guidelines(&dir_name) {
+            continue;
+        }
+        let legacy_dir = path.join("legacy");
+        if legacy_dir.join("task.json").is_file() {
+            let rel = relative_to(research_dir, &legacy_dir);
+            let rel_dir = format!("research/{}", rel);
+            let before_len = tasks.len();
+            scan_task_dir(
+                &dir_name,
+                &rel_dir,
+                true,
+                &legacy_dir,
+                sessions,
+                developer_workflow,
+                config_default_workflow,
+                tasks,
+                errors,
+            );
+            if tasks.len() > before_len && is_lean_task_dir(&path) {
+                if let Some(last) = tasks.last_mut() {
+                    let extra = collect_lean_markdown_refs(project_dir, &path, &last.id);
+                    merge_lean_refs(last, extra);
+                }
+            }
+        } else if path.join("task.json").is_file() {
+            let rel = relative_to(research_dir, &path);
+            let rel_dir = format!("research/{}", rel);
+            scan_task_dir(
+                &dir_name,
+                &rel_dir,
+                true,
+                &path,
+                sessions,
+                developer_workflow,
+                config_default_workflow,
+                tasks,
+                errors,
+            );
+        } else if is_lean_task_dir(&path) {
             let rel = relative_to(research_dir, &path);
             let rel_dir = format!("research/{}", rel);
             scan_lean_task_dir(
+                project_dir,
                 &dir_name,
                 &rel_dir,
                 true,
@@ -1433,6 +1858,7 @@ fn scan_lean_archived_dir(
             );
         } else {
             scan_lean_archived_dir(
+                project_dir,
                 research_dir,
                 &path,
                 sessions,
@@ -2414,5 +2840,112 @@ paths: [src/index.ts, 'test/*.test.js', "docs/**"]
         assert_eq!(t.progress, 1.0);
 
         let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn lean_tasks_extract_spec_prd_and_file_refs() {
+        let root = std::env::temp_dir().join(format!("trellis-card-lean-refs-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+
+        // Create specs (root spec, nested spec, category index spec)
+        fs::create_dir_all(root.join(".trellis/spec/frontend")).unwrap();
+        fs::create_dir_all(root.join(".trellis/spec/big-question")).unwrap();
+        fs::write(root.join(".trellis/spec/design-system.md"), "# Design System\n").unwrap();
+        fs::write(root.join(".trellis/spec/frontend/directory-structure.md"), "# Frontend\n").unwrap();
+        fs::write(root.join(".trellis/spec/big-question/index.md"), "# Big Questions\n").unwrap();
+
+        // Task A: core task
+        let core = root.join(".trellis/research/board-game-core");
+        fs::create_dir_all(&core).unwrap();
+        fs::write(
+            core.join("prd.md"),
+            "# PRD: Core Engine\n**Topic Path:** `.trellis/research/board-game-core/`\n- Follow `.trellis/spec/frontend/directory-structure.md`.\n- Shared registry in `src/core/game/registry.ts:10-20`.\n",
+        )
+        .unwrap();
+        fs::write(
+            core.join("implement.md"),
+            "# Implement\n**Status:** Completed\n## 1. Ordered Implementation Checklist\n- [x] Update `src/app/rooms/[id]/page.tsx#L12`\n- [x] Ignore wildcard `src/components/*` and placeholder `.trellis/spec/<cat>/`\n",
+        )
+        .unwrap();
+
+        // Task B: feature referencing Task A, root spec, directory spec, and shared file
+        let feat = root.join(".trellis/research/game-splendor");
+        fs::create_dir_all(&feat).unwrap();
+        fs::write(
+            feat.join("prd.md"),
+            "# PRD: Splendor\n**Parent:** `board-game-core`\n**Topic Path:** `.trellis/research/game-splendor/`\n- Reuses `.trellis/research/board-game-core/` and `board-game-core`.\n- Must comply with `.trellis/spec/design-system.md`.\n- See `.trellis/spec/big-question/`.\n- Touches `src/core/game/registry.ts`.\n",
+        )
+        .unwrap();
+
+        let (tasks, errors) = scan_tasks(&root);
+        assert!(errors.is_empty());
+        assert_eq!(tasks.len(), 2);
+
+        let t_core = tasks.iter().find(|t| t.id == "board-game-core").unwrap();
+        assert_eq!(t_core.spec_refs, vec![".trellis/spec/frontend/directory-structure.md"]);
+        assert_eq!(
+            t_core.file_refs,
+            vec!["src/core/game/registry.ts", "src/app/rooms/[id]/page.tsx"]
+        );
+        assert!(t_core.prd_refs.is_empty(), "Must not self-reference");
+        assert_eq!(t_core.children, vec!["game-splendor"]);
+
+        let t_feat = tasks.iter().find(|t| t.id == "game-splendor").unwrap();
+        assert_eq!(
+            t_feat.spec_refs,
+            vec![
+                ".trellis/spec/design-system.md",
+                ".trellis/spec/big-question/index.md"
+            ]
+        );
+        assert_eq!(t_feat.prd_refs, vec!["board-game-core"]);
+        assert_eq!(t_feat.parent.as_deref(), Some("board-game-core"));
+        assert_eq!(t_feat.file_refs, vec!["src/core/game/registry.ts"]);
+
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn lean_archived_legacy_preserves_spec_refs() {
+        let root = std::env::temp_dir().join(format!("trellis-card-lean-legacy-arch-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+
+        let legacy_dir = root.join(".trellis/research/archive/2026-10/10-28-spec-explorer/legacy");
+        fs::create_dir_all(&legacy_dir).unwrap();
+        fs::write(
+            legacy_dir.join("task.json"),
+            r#"{"id":"spec-explorer","title":"Spec Explorer","status":"completed"}"#,
+        )
+        .unwrap();
+        fs::write(
+            legacy_dir.join("implement.jsonl"),
+            r#"{"file":".trellis/spec/frontend/component-guidelines.md","reason":"ui"}"#,
+        )
+        .unwrap();
+        fs::write(legacy_dir.join("prd.md"), "# PRD: Spec Explorer\n").unwrap();
+
+        let (tasks, errors) = scan_tasks_with_archived(&root);
+        assert!(errors.is_empty());
+        assert_eq!(tasks.len(), 1);
+        assert_eq!(tasks[0].id, "spec-explorer");
+        assert!(tasks[0].archived);
+        assert_eq!(
+            tasks[0].spec_refs,
+            vec![".trellis/spec/frontend/component-guidelines.md"]
+        );
+
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn current_repo_lean_tasks_produce_relations() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
+        let (tasks, errors) = scan_tasks_with_archived(root);
+        assert!(errors.is_empty(), "Errors: {:?}", errors);
+
+        let strict = tasks.iter().find(|t| t.id == "strict-status-lifecycle").unwrap();
+        assert!(strict.spec_refs.contains(&".trellis/spec/guides/lean-trellis-lifecycle.md".to_string()));
+        assert!(strict.prd_refs.contains(&"support-lean-trellis".to_string()));
+        assert!(strict.file_refs.contains(&"src-tauri/src/scan.rs".to_string()));
     }
 }

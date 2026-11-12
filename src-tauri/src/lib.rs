@@ -1053,6 +1053,30 @@ pub(crate) fn scan_specs_in_root(spec_root: &Path) -> Vec<SpecOut> {
     specs
 }
 
+pub(crate) fn list_specs_for_project(project_dir: &Path) -> Vec<SpecOut> {
+    let spec_root = project_dir.join(".trellis").join("spec");
+    let mut specs = scan_specs_in_root(&spec_root);
+    if specs.is_empty() {
+        return specs;
+    }
+    let (tasks, _) = scan::scan_tasks_with_archived(project_dir);
+    for spec in &mut specs {
+        let cat_prefix = spec.path.strip_suffix("/index.md");
+        let count = tasks
+            .iter()
+            .filter(|task| {
+                task.spec_refs.iter().any(|raw| {
+                    let norm = scan::normalize_spec_rel_path(raw);
+                    norm == spec.path
+                        || cat_prefix.is_some_and(|cat| norm.trim_end_matches('/') == cat)
+                })
+            })
+            .count();
+        spec.referenced_by = count;
+    }
+    specs
+}
+
 // 项目通用规范地图：扫描 .trellis/spec/ 返回每个规范的路径、填写状态、
 // 被任务引用次数（trellis-update-spec 沉淀的团队知识资产）。
 #[tauri::command]
@@ -1060,8 +1084,7 @@ fn list_specs(state: State<AppState>, project: String) -> Result<Vec<SpecOut>, S
     if !is_allowed_project(&state, &project) {
         return Err("Project not found in scanned directories".into());
     }
-    let spec_root = expand(&project).join(".trellis").join("spec");
-    Ok(scan_specs_in_root(&spec_root))
+    Ok(list_specs_for_project(&expand(&project)))
 }
 
 // 扫描项目中所有 design.md 并返回负向决策/避坑档案（DeepSeek discipline）
@@ -1939,6 +1962,45 @@ mod tests {
         assert_eq!(groups.len(), 1);
         assert_eq!(groups[0].ref_task_id, "b");
         assert_eq!(groups[0].task_ids, vec!["a", "c"]);
+    }
+
+    #[test]
+    fn list_specs_populates_referenced_by_for_lean_tasks() {
+        let root = std::env::temp_dir().join(format!(
+            "trellis-card-spec-ref-count-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(root.join(".trellis/spec/frontend")).unwrap();
+        std::fs::write(root.join(".trellis/spec/design-system.md"), "# Design System\n").unwrap();
+        std::fs::write(
+            root.join(".trellis/spec/frontend/ui.md"),
+            "# UI Spec\n",
+        )
+        .unwrap();
+
+        let t1 = root.join(".trellis/research/task-one");
+        let t2 = root.join(".trellis/research/task-two");
+        std::fs::create_dir_all(&t1).unwrap();
+        std::fs::create_dir_all(&t2).unwrap();
+        std::fs::write(
+            t1.join("prd.md"),
+            "# One\nFollow `.trellis/spec/design-system.md` and `.trellis/spec/frontend/ui.md`.\n",
+        )
+        .unwrap();
+        std::fs::write(
+            t2.join("prd.md"),
+            "# Two\nFollow `.trellis/spec/design-system.md`.\n",
+        )
+        .unwrap();
+
+        let specs = list_specs_for_project(&root);
+        let ds = specs.iter().find(|s| s.path == "design-system.md").unwrap();
+        let ui = specs.iter().find(|s| s.path == "frontend/ui.md").unwrap();
+        assert_eq!(ds.referenced_by, 2);
+        assert_eq!(ui.referenced_by, 1);
+
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     #[test]
