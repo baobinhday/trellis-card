@@ -1,18 +1,19 @@
 import fs from 'node:fs';
 
-const tag = process.env.GITHUB_REF_NAME || process.argv[2] || '';
+const pkgPath = 'package.json';
+const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+
+const tag = process.env.GITHUB_REF_NAME || process.argv[2] || pkg.version || '';
 const version = tag.replace(/^v/, '').trim();
 
 if (!version) {
-  console.log('No version provided, skipping sync.');
+  console.log('No version provided and none found in package.json, skipping sync.');
   process.exit(0);
 }
 
 console.log('Syncing project version to:', version);
 
 // 1. Update package.json
-const pkgPath = 'package.json';
-const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
 pkg.version = version;
 fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + '\n');
 console.log('Updated package.json');
@@ -34,11 +35,11 @@ cargo = cargo.replace(/^version\s*=\s*"[^"]+"/m, `version = "${version}"`);
 fs.writeFileSync(cargoPath, cargo);
 console.log('Updated src-tauri/Cargo.toml');
 
-// 4. Update index.html
+// 4. Update index.html (keep generic; Vite htmlVersionPlugin injects dynamic version during build)
 const indexPath = 'index.html';
 if (fs.existsSync(indexPath)) {
   let indexHtml = fs.readFileSync(indexPath, 'utf8');
-  indexHtml = indexHtml.replace(/<title>Trellis Kanban Board.*?<\/title>/, `<title>Trellis Kanban Board v${version}</title>`);
+  indexHtml = indexHtml.replace(/<title>Trellis Kanban Board.*?<\/title>/, `<title>Trellis Kanban Board</title>`);
   fs.writeFileSync(indexPath, indexHtml);
   console.log('Updated index.html');
 }
