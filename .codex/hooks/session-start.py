@@ -185,6 +185,7 @@ def _detect_platform(input_data: dict) -> str | None:
         "KIRO_PROJECT_DIR": "kiro",
         "COPILOT_PROJECT_DIR": "copilot",
         "TRAE_PROJECT_DIR": "trae",
+        "OPENCODE_PROJECT_DIR": "opencode",
         # Last: the shared alias, only meaningful once no vendor key matched.
         "CLAUDE_PROJECT_DIR": "claude",
     }
@@ -198,6 +199,8 @@ def _detect_platform(input_data: dict) -> str | None:
         return "cursor"
     if ".codex" in script_parts:
         return "codex"
+    if ".opencode" in script_parts:
+        return "opencode"
     if ".gemini" in script_parts:
         return "gemini"
     if ".qoder" in script_parts:
