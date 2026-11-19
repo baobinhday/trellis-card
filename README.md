@@ -135,6 +135,16 @@ npm run check
 npm run build
 ```
 
+### Crash log
+
+If the app exits unexpectedly (including the tray icon disappearing), check the crash log. It records startup, clean shutdown, and any Rust panic with its message, source location, and full backtrace:
+
+- **Linux:** `~/.config/trellis-card/crash.log`
+- **macOS:** `~/Library/Application Support/trellis-card/crash.log`
+- **Windows:** `%APPDATA%\trellis-card\crash.log`
+
+A `[PANIC]` entry is a Rust crash. `[QUIT]` / `[EXIT]` means the app closed intentionally. If the log ends at `[START]` with no exit marker, the process was likely killed by the OS (for example OOM) — check the system log (`journalctl -k | grep -i oom` on Linux, Event Viewer on Windows, Console.app on macOS). The log rotates to `crash.log.old` after 1 MB and is also mirrored to stderr when launched from a terminal.
+
 ---
 
 ## Architecture & Tech Stack

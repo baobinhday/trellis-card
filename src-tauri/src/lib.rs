@@ -5,6 +5,7 @@ mod focus;
 mod hook_cli;
 mod hook_install;
 mod ipc;
+mod logging;
 mod platform;
 mod progress;
 mod runtime;
@@ -1677,7 +1678,11 @@ fn fit_window_height(app: AppHandle, height: f64) -> Result<(), String> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    // Install the crash logger before anything else can panic, including
+    // worker threads spawned during setup.
+    logging::init();
+
+    let runtime_result = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             let cfg = config::load();
@@ -1700,11 +1705,15 @@ pub fn run() {
 
             // 关闭窗口 = 隐藏到托盘，不退出
             let w = window.clone();
-            window.on_window_event(move |event| {
-                if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+            window.on_window_event(move |event| match event {
+                tauri::WindowEvent::CloseRequested { api, .. } => {
                     api.prevent_close();
                     let _ = w.hide();
                 }
+                tauri::WindowEvent::Destroyed => {
+                    logging::log("EXIT", "main window destroyed (normal shutdown)");
+                }
+                _ => {}
             });
 
             // 托盘：显示 / 退出
@@ -1723,7 +1732,10 @@ pub fn run() {
                             let _ = w.set_focus();
                         }
                     }
-                    "quit" => app.exit(0),
+                    "quit" => {
+                        logging::log("QUIT", "user chose Quit from tray menu");
+                        app.exit(0);
+                    }
                     _ => {}
                 });
             if let Some(icon) = app.default_window_icon() {
@@ -1768,8 +1780,12 @@ pub fn run() {
             get_wsl_info,
             set_wsl_distro,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .run(tauri::generate_context!());
+
+    if let Err(err) = &runtime_result {
+        logging::log("ERROR", &format!("tauri event loop error: {err:?}"));
+    }
+    runtime_result.expect("error while running tauri application");
 }
 
 // CLI 入口由二进制入口转发，保持 GUI 与 Hook 命令共用同一 crate。
