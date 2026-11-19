@@ -14,6 +14,7 @@ mod session;
 mod watch;
 
 use config::AppConfig;
+use logging::lock_or_recover;
 use runtime::{ActionRecord, AgentRuntime, TaskRuntimeView, TrellisAction};
 use serde::Serialize;
 use session::{HookEvent, SessionRegistry};
@@ -235,23 +236,23 @@ pub(crate) fn discover_all(cfg: &AppConfig) -> Vec<PathBuf> {
 fn cached_discover_all(state: &AppState) -> Vec<PathBuf> {
     let now = Instant::now();
     {
-        let cache = state.projects_cache.lock().unwrap();
+        let cache = lock_or_recover(&state.projects_cache);
         if let Some(t) = cache.generated_at {
             if now.duration_since(t) < PROJECTS_CACHE_TTL {
                 return cache.discovered.clone();
             }
         }
     }
-    let cfg = state.config.lock().unwrap();
+    let cfg = lock_or_recover(&state.config);
     let discovered = discover_all(&cfg);
-    let mut cache = state.projects_cache.lock().unwrap();
+    let mut cache = lock_or_recover(&state.projects_cache);
     cache.discovered = discovered.clone();
     cache.generated_at = Some(now);
     discovered
 }
 
 fn invalidate_projects_cache(state: &AppState) {
-    let mut cache = state.projects_cache.lock().unwrap();
+    let mut cache = lock_or_recover(&state.projects_cache);
     cache.generated_at = None;
 }
 
@@ -274,7 +275,7 @@ fn project_dir_for_path(path: &Path) -> Option<PathBuf> {
 /* Hook 发现的项目不受 roots 限制，但仍必须是真正的 Trellis 项目目录。 */
 fn register_dynamic_project(state: &AppState, path: &str) -> Option<(PathBuf, bool)> {
     let project = project_dir_for_path(Path::new(path))?;
-    let mut cfg = state.config.lock().unwrap();
+    let mut cfg = lock_or_recover(&state.config);
     /* A root can itself be a Trellis project. In that case the scanner
     intentionally stops descending, so a child project must still be
     registered when a hook proves that it is active. */
@@ -332,7 +333,7 @@ fn is_allowed_project(state: &AppState, project: &str) -> bool {
 }
 
 fn save_state(state: &AppState) -> Result<(), String> {
-    let cfg = state.config.lock().unwrap().clone();
+    let cfg = lock_or_recover(&state.config).clone();
     config::save(&cfg)?;
     invalidate_projects_cache(state);
     Ok(())
@@ -395,7 +396,7 @@ fn is_completion_transition(prev: Option<&str>, cur: &str) -> bool {
 fn build_runtime_snapshot(state: &AppState) -> RuntimeSnapshot {
     let now = now_seconds();
     let projects = cached_discover_all(state);
-    let mut runtime = state.runtime.lock().unwrap();
+    let mut runtime = lock_or_recover(&state.runtime);
     runtime.sessions.prune(now);
     let mut views = Vec::new();
     let mut activities = Vec::new();
@@ -536,13 +537,13 @@ reducer 副作用（task_statuses / pending_completions 写入）在 build_runti
 前端唯一一次性触发入口，不可因「快照未变」被跳过）。 */
 fn flush_snapshot(app: &AppHandle) {
     let state = app.state::<AppState>();
-    let previous = state.runtime.lock().unwrap().focus_key.clone();
+    let previous = lock_or_recover(&state.runtime).focus_key.clone();
     let snapshot = build_runtime_snapshot(&state);
     /* 缓存最近构建的快照：get_runtime_snapshot 读缓存而非直接 build，避免并发扫描 */
-    state.runtime.lock().unwrap().last_snapshot = Some(snapshot.clone());
+    lock_or_recover(&state.runtime).last_snapshot = Some(snapshot.clone());
     let fp = snapshot_fingerprint(&snapshot);
     let (completions, unchanged) = {
-        let mut runtime = state.runtime.lock().unwrap();
+        let mut runtime = lock_or_recover(&state.runtime);
         let unchanged = runtime.last_emitted_fingerprint.as_deref() == Some(fp.as_str())
             && runtime.pending_completions.is_empty();
         (std::mem::take(&mut runtime.pending_completions), unchanged)
@@ -554,7 +555,7 @@ fn flush_snapshot(app: &AppHandle) {
         let _ = app.emit("focus-task-changed", &snapshot.focus_key);
     }
     let _ = app.emit("agent-state-changed", &snapshot);
-    state.runtime.lock().unwrap().last_emitted_fingerprint = Some(fp);
+    lock_or_recover(&state.runtime).last_emitted_fingerprint = Some(fp);
     for completed in completions {
         let _ = app.emit("task-completed", &completed);
     }
@@ -637,7 +638,7 @@ where
         return;
     }
     {
-        let mut runtime = state.runtime.lock().unwrap();
+        let mut runtime = lock_or_recover(&state.runtime);
         for event in prepared_events {
             let project = event.project.clone();
             let session_id = event.session_id.clone();
@@ -732,7 +733,7 @@ fn get_runtime_snapshot(state: State<AppState>) -> RuntimeSnapshot {
     - 无缓存（首次启动）：直接 build 一次初始化（reducer 副作用幂等，仅初始化）。
     这保证所有「有事件活动」期间的 build 都经 coordinator 串行，消除重复扫描和
     旧快照覆盖新状态。 */
-    let cached = state.runtime.lock().unwrap().last_snapshot.clone();
+    let cached = lock_or_recover(&state.runtime).last_snapshot.clone();
     match cached {
         Some(snapshot) => {
             state.runtime_coord.request();
@@ -740,7 +741,7 @@ fn get_runtime_snapshot(state: State<AppState>) -> RuntimeSnapshot {
         }
         None => {
             let snapshot = build_runtime_snapshot(&state);
-            state.runtime.lock().unwrap().last_snapshot = Some(snapshot.clone());
+            lock_or_recover(&state.runtime).last_snapshot = Some(snapshot.clone());
             snapshot
         }
     }
@@ -762,7 +763,7 @@ fn configure_hook(agent: String, enabled: bool) -> Result<hook_install::HookStat
 
 #[tauri::command]
 fn get_config(state: State<AppState>) -> ConfigOut {
-    let cfg = state.config.lock().unwrap();
+    let cfg = lock_or_recover(&state.config);
     ConfigOut {
         configured: cfg.initialized || !cfg.roots.is_empty() || !cfg.dynamic_projects.is_empty(),
         roots: cfg.roots.clone(),
@@ -794,7 +795,7 @@ fn get_wsl_info(state: State<AppState>) -> WslInfo {
             current: None,
         };
     }
-    let current = state.config.lock().unwrap().wsl_distro.clone();
+    let current = lock_or_recover(&state.config).wsl_distro.clone();
     WslInfo {
         supported: true,
         distros: crate::platform::detect_wsl_distros(),
@@ -810,13 +811,13 @@ fn set_wsl_distro(state: State<AppState>, distro: Option<String>) -> Result<(), 
     let distro = distro
         .filter(|d| !d.trim().is_empty())
         .map(|d| d.trim().to_string());
-    state.config.lock().unwrap().wsl_distro = distro;
+    lock_or_recover(&state.config).wsl_distro = distro;
     save_state(&state)
 }
 
 #[tauri::command]
 fn complete_setup(state: State<AppState>) -> Result<(), String> {
-    let mut cfg = state.config.lock().unwrap();
+    let mut cfg = lock_or_recover(&state.config);
     cfg.initialized = true;
     drop(cfg);
     save_state(&state)
@@ -840,7 +841,7 @@ fn add_root(state: State<AppState>, path: String) -> Result<RootsOut, String> {
         return Err("Directory does not exist or is not readable".into());
     }
     let canonical = platform::strip_device_prefix(&dir.to_string_lossy());
-    let mut cfg = state.config.lock().unwrap();
+    let mut cfg = lock_or_recover(&state.config);
     cfg.initialized = true;
     if !cfg.roots.contains(&canonical) {
         cfg.roots.push(canonical);
@@ -853,7 +854,7 @@ fn add_root(state: State<AppState>, path: String) -> Result<RootsOut, String> {
 
 #[tauri::command]
 fn remove_root(state: State<AppState>, path: String) -> Result<RootsOut, String> {
-    let mut cfg = state.config.lock().unwrap();
+    let mut cfg = lock_or_recover(&state.config);
     cfg.roots.retain(|r| r != &path);
     let roots = cfg.roots.clone();
     drop(cfg);
@@ -1515,7 +1516,7 @@ fn set_always_on_top(app: AppHandle, state: State<AppState>, flag: bool) -> Resu
     if let Some(window) = app.get_webview_window("main") {
         window.set_always_on_top(flag).map_err(|e| e.to_string())?;
     }
-    state.config.lock().unwrap().always_on_top = flag;
+    lock_or_recover(&state.config).always_on_top = flag;
     save_state(&state)?;
     Ok(flag)
 }
@@ -1697,24 +1698,33 @@ pub fn run() {
 
             start_runtime_workers(app.handle());
 
-            let window = app.get_webview_window("main").expect("main window");
-            let _ = window.set_always_on_top(cfg.always_on_top);
-            /* macOS 无边框透明窗口：去除系统阴影，避免胶囊态露出矩形窗口轮廓 */
-            #[cfg(target_os = "macos")]
-            let _ = window.set_shadow(false);
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.set_always_on_top(cfg.always_on_top);
+                /* macOS 无边框透明窗口：去除系统阴影，避免胶囊态露出矩形窗口轮廓 */
+                #[cfg(target_os = "macos")]
+                let _ = window.set_shadow(false);
 
-            // 关闭窗口 = 隐藏到托盘，不退出
-            let w = window.clone();
-            window.on_window_event(move |event| match event {
-                tauri::WindowEvent::CloseRequested { api, .. } => {
-                    api.prevent_close();
-                    let _ = w.hide();
-                }
-                tauri::WindowEvent::Destroyed => {
-                    logging::log("EXIT", "main window destroyed (normal shutdown)");
-                }
-                _ => {}
-            });
+                // 关闭窗口 = 隐藏到托盘，不退出
+                let w = window.clone();
+                window.on_window_event(move |event| match event {
+                    tauri::WindowEvent::CloseRequested { api, .. } => {
+                        api.prevent_close();
+                        let _ = w.hide();
+                    }
+                    tauri::WindowEvent::Destroyed => {
+                        logging::log("EXIT", "main window destroyed (normal shutdown)");
+                    }
+                    _ => {}
+                });
+            } else {
+                // Never panic silently: a missing main window must be
+                // diagnosable via crash.log. Keep the tray alive so the user
+                // can still quit cleanly.
+                logging::log(
+                    "ERROR",
+                    "main webview window missing during setup; window init skipped",
+                );
+            }
 
             // 托盘：显示 / 退出
             use tauri::menu::{MenuBuilder, MenuItemBuilder};
@@ -1785,7 +1795,8 @@ pub fn run() {
     if let Err(err) = &runtime_result {
         logging::log("ERROR", &format!("tauri event loop error: {err:?}"));
     }
-    runtime_result.expect("error while running tauri application");
+    // The error is already recorded via crash.log — do not panic here, which
+    // used to turn a setup/runtime failure into a silent process exit.
 }
 
 // CLI 入口由二进制入口转发，保持 GUI 与 Hook 命令共用同一 crate。
@@ -2446,7 +2457,7 @@ mod tests {
 
         /* 3) 应用事件到 SessionRegistry（apply_hook_events 的核心状态迁移；
         不调用 register_dynamic_project——那会写真实配置文件，测试必须隔离） */
-        let mut runtime = state.runtime.lock().unwrap();
+        let mut runtime = lock_or_recover(&state.runtime);
         assert!(runtime.sessions.apply(decoded.clone()));
         drop(runtime);
 

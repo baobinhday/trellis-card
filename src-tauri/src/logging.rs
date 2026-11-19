@@ -4,7 +4,7 @@ use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::panic::{self, PanicHookInfo};
 use std::path::{Path, PathBuf};
-use std::sync::{Mutex, Once};
+use std::sync::{Mutex, MutexGuard, Once};
 
 const MAX_LOG_BYTES: u64 = 1024 * 1024;
 
@@ -62,6 +62,25 @@ pub fn log(tag: &str, message: &str) {
     eprintln!("{}", line.trim_end());
 }
 
+/// Acquire a `Mutex` guard, recovering from poisoning instead of panicking.
+///
+/// A background thread that panics while holding a mutex poisons it; a later
+/// `.lock().unwrap()` on the main thread would then panic and silently kill
+/// the GUI (release builds use `windows_subsystem = "windows"`). This helper
+/// recovers the guarded data via `PoisonError::into_inner()` and writes a
+/// `[POISON]` diagnostic line so the event stays distinguishable from a real
+/// `[PANIC]` — the recovered state may be partially updated, but the app keeps
+/// running.
+pub fn lock_or_recover<'a, T>(mutex: &'a Mutex<T>) -> MutexGuard<'a, T> {
+    mutex.lock().unwrap_or_else(|poisoned| {
+        log(
+            "POISON",
+            "recovered a poisoned mutex; state may be partially updated",
+        );
+        poisoned.into_inner()
+    })
+}
+
 /// Install the global panic hook once. Call at the very start of `run()`,
 /// before any worker thread is spawned, so panics on background threads are
 /// captured too.
@@ -108,6 +127,29 @@ mod tests {
         assert!(
             contents.contains("--- backtrace ---"),
             "backtrace missing from log"
+        );
+    }
+
+    #[test]
+    fn lock_or_recover_recovers_poisoned_mutex_and_logs_poison() {
+        let mutex = Mutex::new(42);
+        // Poison the mutex by panicking while its guard is held.
+        let mutex_ref = &mutex;
+        let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _guard = mutex_ref.lock().unwrap();
+            panic!("poison the mutex");
+        }));
+        assert!(mutex.is_poisoned(), "mutex should be poisoned by the panic");
+
+        // Recovery must yield the original data and must not panic.
+        let guard = lock_or_recover(&mutex);
+        assert_eq!(*guard, 42, "recovered guard should hold the old data");
+        drop(guard);
+
+        let contents = fs::read_to_string(crash_log_path()).unwrap_or_default();
+        assert!(
+            contents.contains("[POISON]"),
+            "POISON diagnostic missing from log"
         );
     }
 }
